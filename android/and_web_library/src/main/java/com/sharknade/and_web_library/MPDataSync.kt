@@ -1,19 +1,30 @@
 package com.sharknade.and_web_library
 
 import android.util.Log
+import com.github.lzyzsd.jsbridge.BridgeWebView
 
 // ========================
 // 注解定义
 // ========================
 
 /**
- * 标记 WebView 子类需要 UserInfo（uid + ticket）数据同步
+ * 标记 Activity / Fragment 需要 UserInfo（uid + ticket）数据同步
  *
- * 使用方式：
+ * 使用方式（组合模式 + KSP 自动注入）：
  * ```kotlin
  * @NeedsUserInfo
  * @NeedsLoanInfo
- * class WebViewForLoan(context: Context, attrs: AttributeSet) : MPBridgeWebView(context, attrs)
+ * class LoanActivity : AppCompatActivity() {
+ *     private lateinit var webView: MPBridgeWebView
+ *     private lateinit var dataSyncHelper: MPDataSyncHelper
+ *
+ *     override fun onCreate(savedInstanceState: Bundle?) {
+ *         super.onCreate(savedInstanceState)
+ *         webView = MPBridgeWebView(this)
+ *         val channels = DataSyncBindings.getChannels(this.javaClass.name)
+ *         dataSyncHelper = MPDataSyncHelper.create(webView, channels)
+ *     }
+ * }
  * ```
  */
 @Target(AnnotationTarget.CLASS)
@@ -21,14 +32,14 @@ import android.util.Log
 annotation class NeedsUserInfo
 
 /**
- * 标记 WebView 子类需要 LoanInfo（借款信息）数据同步
+ * 标记 Activity / Fragment 需要 LoanInfo（借款信息）数据同步
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class NeedsLoanInfo
 
 /**
- * 标记 WebView 子类需要 VipInfo（会员信息）数据同步
+ * 标记 Activity / Fragment 需要 VipInfo（会员信息）数据同步
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
@@ -106,7 +117,9 @@ private data class ChannelState(
 /**
  * Native 端数据同步辅助器
  *
- * 通过注解自动检测 WebView 子类所需的数据通道，
+ * 通过 KSP 在编译期扫描 @NeedsUserInfo / @NeedsLoanInfo 等注解生成 DataSyncBindings 注册表，
+ * 运行时通过构造函数传入所需数据通道，无反射开销。
+ *
  * 管理页面加载状态和各通道数据推送状态，
  * 在「页面加载完成」+「数据就绪」时自动通过 JSBridge 推送数据到前端。
  *
@@ -115,30 +128,39 @@ private data class ChannelState(
  * 2. 页面已加载 + 数据未就绪 → 等待数据到达后推送
  * 3. 页面未加载 + 数据已就绪 → 等待页面加载完成后推送
  *
- * 使用方式：
+ * 使用方式（组合模式 + KSP 注入）：
  * ```kotlin
- * // 1. 主模块定义 WebView 子类，标注所需数据通道
  * @NeedsUserInfo
  * @NeedsLoanInfo
- * class WebViewForLoan(context: Context, attrs: AttributeSet) : MPBridgeWebView(context, attrs)
+ * class LoanActivity : AppCompatActivity() {
+ *     private lateinit var webView: MPBridgeWebView
+ *     private lateinit var dataSyncHelper: MPDataSyncHelper
  *
- * // 2. 加载页面
- * webView.loadBridgeUrl("https://example.com/loan")
+ *     override fun onCreate(savedInstanceState: Bundle?) {
+ *         super.onCreate(savedInstanceState)
+ *         webView = MPBridgeWebView(this)
+ *         // KSP 生成的注册表，编译期确定通道
+ *         val channels = DataSyncBindings.getChannels(this.javaClass.name)
+ *         dataSyncHelper = MPDataSyncHelper.create(webView, channels)
  *
- * // 3. 设置业务数据（可在页面加载前或后）
- * webView.getDataSyncHelper().setUserInfo("""{"uid":"123","ticket":"abc"}""")
- * webView.getDataSyncHelper().setLoanInfo("""{"loanId":"L001","amount":50000}""")
+ *         // 设置业务数据
+ *         dataSyncHelper.setUserInfo("""{"uid":"123","ticket":"abc"}""")
+ *         dataSyncHelper.setLoanInfo("""{"loanId":"L001","amount":50000}""")
  *
- * // 4. 页面加载完成后通知（在 WebViewClient.onPageFinished 中调用）
- * webView.notifyPageLoaded()
+ *         // 加载页面
+ *         webView.loadBridgeUrl("https://example.com/loan")
+ *     }
+ *
+ *     // WebViewClient 回调中通知页面状态
+ *     // onPageStarted → dataSyncHelper.notifyPageLoading()
+ *     // onPageFinished → dataSyncHelper.notifyPageLoaded()
+ * }
  * ```
  */
 class MPDataSyncHelper private constructor(
-    private val webView: MPBridgeWebView
-) {
-    /** 通过注解检测到的所需数据通道 */
+    private val webView: BridgeWebView,
     private val requiredChannels: Set<String>
-
+) {
     /** 各通道状态 */
     private val channelStates: MutableMap<String, ChannelState> = mutableMapOf()
 
@@ -146,7 +168,6 @@ class MPDataSyncHelper private constructor(
     private var syncState: SyncState = SyncState.IDLE
 
     init {
-        requiredChannels = readAnnotations()
         // 初始化所需通道的状态
         for (channel in requiredChannels) {
             channelStates[channel] = ChannelState()
@@ -157,39 +178,14 @@ class MPDataSyncHelper private constructor(
     }
 
     companion object {
-        /** 为指定的 MPBridgeWebView 创建 DataSyncHelper */
-        fun create(webView: MPBridgeWebView): MPDataSyncHelper {
-            return MPDataSyncHelper(webView)
+        /**
+         * 为指定的 BridgeWebView 创建 DataSyncHelper
+         * @param webView JSBridge 封装的 WebView 实例
+         * @param requiredChannels 所需数据通道集合（由 KSP 生成的 DataSyncBindings 提供）
+         */
+        fun create(webView: BridgeWebView, requiredChannels: Set<String>): MPDataSyncHelper {
+            return MPDataSyncHelper(webView, requiredChannels)
         }
-    }
-
-    /**
-     * 通过反射读取 WebView 类上的注解，确定所需数据通道
-     * 遍历类继承链，直到 MPBridgeWebView 为止
-     */
-    private fun readAnnotations(): Set<String> {
-        val channels = mutableSetOf<String>()
-        var clazz: Class<*>? = webView.javaClass
-
-        while (clazz != null && clazz != MPBridgeWebView::class.java && clazz != android.webkit.WebView::class.java) {
-            // 标准注解
-            if (clazz.isAnnotationPresent(NeedsUserInfo::class.java)) {
-                channels.add(DataSyncChannel.USER_INFO)
-            }
-            if (clazz.isAnnotationPresent(NeedsLoanInfo::class.java)) {
-                channels.add(DataSyncChannel.LOAN_INFO)
-            }
-            if (clazz.isAnnotationPresent(NeedsVipInfo::class.java)) {
-                channels.add(DataSyncChannel.VIP_INFO)
-            }
-            // 自定义通道注解
-            clazz.getAnnotation(NeedsDataSync::class.java)?.let {
-                channels.add(it.channel)
-            }
-            clazz = clazz.superclass
-        }
-
-        return channels
     }
 
     /** 获取所需数据通道列表 */
@@ -272,7 +268,7 @@ class MPDataSyncHelper private constructor(
             val state = channelStates[channel]
             if (state != null && state.data != null && !state.pushed) {
                 val methodName = DataSyncMethod.fromChannel(channel)
-                webView.callBridgeHandler(methodName, state.data)
+                webView.callHandler(methodName, state.data!!, null)
 
                 state.pushed = true
                 if (MPBridgeConfig.debug) {

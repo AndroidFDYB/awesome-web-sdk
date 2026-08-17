@@ -45,54 +45,8 @@ import { webview } from '@kit.ArkWeb';
 import { JSBridgeManager } from '../bridge/JSBridge';
 import { SyncBridgeHandler, AsyncBridgeHandler } from '../bridge/BridgeHandler';
 import { DataSyncHelper } from '../bridge/DataSyncHelper';
-
-/**
- * javaScriptProxy 注入对象
- * 注册到 window._dsbridge，供 bridge.js 调用
- */
-class DsBridgeProxy {
-  private manager: JSBridgeManager;
-
-  constructor(manager: JSBridgeManager) {
-    this.manager = manager;
-  }
-
-  /**
-   * 同步调用 Native Handler
-   * @param requestJson BridgeRequest JSON 字符串
-   * @returns BridgeResponse JSON 字符串
-   */
-  call(requestJson: string): string {
-    return this.manager.handleSyncCall(requestJson);
-  }
-
-  /**
-   * 异步调用 Native Handler
-   * @param requestJson BridgeRequest JSON 字符串
-   * @returns 空字符串
-   */
-  callAsync(requestJson: string): string {
-    return this.manager.handleAsyncCall(requestJson);
-  }
-
-  /**
-   * 检查方法是否存在
-   * @param method 方法名
-   * @returns 是否存在
-   */
-  hasMethod(method: string): boolean {
-    return this.manager.hasMethod(method);
-  }
-
-  /**
-   * Native 调用 JS 后的结果回传
-   * @param callbackId 回调 ID
-   * @param result 结果
-   */
-  onNativeCallComplete(callbackId: string, result: string): void {
-    this.manager.onNativeCallComplete(callbackId, result);
-  }
-}
+import { DsBridgeProxy } from '../bridge/DsBridgeProxy';
+import { BridgeUtils } from '../bridge/BridgeUtils';
 
 @Component
 export struct MPBridgeWeb {
@@ -119,7 +73,7 @@ export struct MPBridgeWeb {
       console.log('[MPBridgeWeb] aboutToAppear, debug mode enabled');
     }
     // 计算 URL，追加平台参数
-    this.finalUrl = this.appendPlatformParam(this.url);
+    this.finalUrl = BridgeUtils.appendPlatformParam(this.url);
   }
 
   build() {
@@ -135,7 +89,7 @@ export struct MPBridgeWeb {
       .onPageBegin(() => {
         // 页面开始加载时注入 bridge.js
         this.bridgeManager.setWebController(this.controller);
-        this.injectBridgeJs();
+        BridgeUtils.injectBridgeJs(this.controller, getContext(this));
         // 通知数据同步辅助器页面开始加载（重置推送状态）
         this.dataSyncHelper.notifyPageLoading();
       })
@@ -150,33 +104,4 @@ export struct MPBridgeWeb {
       .height('100%');
   }
 
-  /**
-   * 在 URL 上追加 platform 查询参数
-   * 如果 URL 已包含 platform 参数则不重复追加
-   */
-  private appendPlatformParam(url: string): string {
-    if (url.includes('platform=')) {
-      return url;
-    }
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}platform=harmony`;
-  }
-
-  /**
-   * 注入 bridge.js 到 WebView
-   * 从 rawfile 读取 bridge.js 并执行
-   */
-  private injectBridgeJs(): void {
-    try {
-      let context = getContext(this);
-      let rawFile = context.resourceManager.getRawFileContentSync('bridge.js');
-      let bridgeJsCode = rawFile.toString();
-      this.controller.runJavaScript(bridgeJsCode);
-      if (this.debug) {
-        console.log('[MPBridgeWeb] bridge.js injected successfully');
-      }
-    } catch (e) {
-      console.error('[MPBridgeWeb] Failed to inject bridge.js:', JSON.stringify(e));
-    }
-  }
 }

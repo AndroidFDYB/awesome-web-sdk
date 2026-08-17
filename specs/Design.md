@@ -10,8 +10,8 @@ MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容�
 
 | 平台 | 工程模块 | 产物 | 技术方案 |
 |------|----------|------|----------|
-| Android | `android/and_web_library` | AAR | 本地 `:library` 模块（JsBridge 源码） + MPBridgeWebView 封装 |
-| 鸿蒙 | `hm/hm_web_library` | HAR | 官方 Web 组件 `javaScriptProxy` + 自定义 JSBridgeManager |
+| Android | `android/and_web_library` + `data-sync-processor` | AAR | 本地 `:library` 模块（JsBridge 源码） + MPBridgeWebView 组合封装 + KSP 编译期注解处理 |
+| 鸿蒙 | `hm/hm_web_library` | HAR | 原生 Web 组件 + BridgeUtils 工具注入 + DsBridgeProxy + 自定义 JSBridgeManager |
 | 前端 | `vue-web-sdk` | TGZ (npm) | Vite 库模式，零运行时依赖，自动检测平台，业务数据等待唤醒中间件 |
 
 ---
@@ -49,6 +49,23 @@ MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容�
 - `compileSdk` 使用新语法 `release(36) { minorApiLevel = 1 }`
 - Kotlin DSL 统一管理构建配置，版本通过 `libs.versions.toml` 集中声明
 
+### 2.6 Android 组合模式 + KSP 编译期注入
+
+- **问题**：继承模式要求 `MPBridgeWebView` 声明为 `open class`，子类通过运行时反射读取注解确定数据通道，侵入性高且有性能开销
+- **最终方案**：禁止继承，改用组合模式；通过 KSP（Kotlin Symbol Processing）在编译期扫描 `@NeedsUserInfo` 等注解，生成 `DataSyncBindings` 注册表，运行时直接查表获取通道
+- **模块划分**：
+  - `and_web_library`：注解定义 + `MPDataSyncHelper`（构造注入） + `MPBridgeWebView`（final 类）
+  - `data-sync-processor`：纯 Kotlin/JVM 模块，实现 `SymbolProcessor`，通过 SPI 注册
+  - `app`：`ksp(project(":data-sync-processor"))` 消费处理器
+- **优势**：无运行时反射、编译期类型安全、Activity 组合持有 WebView、SDK 侵入性低
+
+### 2.7 鸿蒙原生 Web 组件 + 工具注入
+
+- **问题**：`MPBridgeWeb` 封装组件隐藏了原生 `Web` 组件的细节，页面只能通过 `@Prop` 传入参数，灵活性差
+- **最终方案**：提取 `BridgeUtils` 静态工具类和 `DsBridgeProxy` 独立类，页面直接使用原生 `Web` 组件，在生命周期回调中调用工具方法
+- **导出**：`DsBridgeProxy`、`BridgeUtils` 从 `Index.ets` 导出，`MPBridgeWeb` 保留为可选便捷组件
+- **优势**：侵入性极低，页面完全掌控 `Web` 组件配置，工具方法可按需调用
+
 ---
 
 ## 3. 模块依赖关系
@@ -58,13 +75,17 @@ android/
 ├── settings.gradle.kts
 │   ├── :app                    # 示例应用（不参与 SDK 产出）
 │   ├── :library                # JsBridge 源码模块（Java，产出 classes.jar）
-│   └── :and_web_library        # Android SDK 模块（Kotlin，产出 AAR）
+│   ├── :and_web_library        # Android SDK 模块（Kotlin，产出 AAR）
+│   └── :data-sync-processor    # KSP 处理器模块（纯 Kotlin/JVM，编译期生成 DataSyncBindings）
 │
 ├── :and_web_library 依赖
-│   ├── project(":library")     # 本地 JsBridge 源码
+│   ├── project(":library")     # 本地 JsBridge 源码（api 暴露给消费者）
 │   ├── androidx.appcompat      # AppCompat 支持
 │   ├── androidx.core.ktx
 │   └── material
+│
+├── :data-sync-processor 依赖
+│   └── com.google.devtools.ksp:symbol-processing-api  # KSP API（仅编译期）
 │
 └── :library 依赖
     ├── androidx.appcompat
@@ -77,9 +98,12 @@ hm/
     ├── src/main/ets/bridge/
     │   ├── JSBridge.ets          # 核心管理器
     │   ├── BridgeHandler.ets     # Handler 接口
-    │   └── BridgeModels.ets      # 数据模型
+    │   ├── BridgeModels.ets      # 数据模型
+    │   ├── DataSyncHelper.ets    # 数据同步辅助器
+    │   ├── DsBridgeProxy.ets     # javaScriptProxy 注入对象（独立导出）
+    │   └── BridgeUtils.ets      # 桥接工具类（静态方法注入）
     ├── src/main/ets/components/
-    │   └── MPBridgeWeb.ets       # Web 组件封装
+    │   └── MPBridgeWeb.ets       # Web 组件封装（可选便捷组件）
     └── src/main/resources/rawfile/
         └── bridge.js            # JS 端注入代码
 ```
@@ -169,7 +193,7 @@ Native -> JS:
 
 ### MPBridgeWebView
 
-继承自 `BridgeWebView`，提供业务友好的 Kotlin API：
+继承自 `BridgeWebView`，提供业务友好的 Kotlin API（**final 类，禁止继承，通过组合使用**）：
 
 ```kotlin
 // 注册 Native Handler 供 JS 调用
@@ -182,25 +206,26 @@ fun callBridgeHandler(methodName: String, data: String?, callback: OnBridgeCallb
 fun callBridgeHandler(methodName: String, callback: OnBridgeCallback?)
 fun callBridgeHandler(methodName: String, data: String?)
 
-// 加载 URL（自动注入桥接 + 追加 ?platform=android）
+// 加载 URL（自动追加 ?platform=android）
 fun loadBridgeUrl(url: String)
-
-// 数据同步集成
-fun getDataSyncHelper(): MPDataSyncHelper  // 懒加载获取数据同步辅助器
-fun notifyPageLoaded()                     // 通知页面加载完成（在 onPageFinished 中调用）
-fun notifyPageLoading()                    // 通知页面开始加载（在 onPageStarted 中调用）
 ```
+
+> 注：数据同步辅助器 (`MPDataSyncHelper`) 不再内置于 `MPBridgeWebView`，由 Activity 通过组合方式外部创建和管理。
 
 ### MPDataSyncHelper
 
-通过注解自动检测 WebView 子类所需的数据通道，管理页面加载状态和数据推送。
+通过 KSP 编译期生成的 `DataSyncBindings` 注册表确定所需数据通道，构造注入，无运行时反射。
 
 ```kotlin
-// 注解（标记在 WebView 子类上）
+// 注解（标记在 Activity / Fragment 上，KSP 编译期扫描）
 @NeedsUserInfo    // 需要 userInfo 通道
 @NeedsLoanInfo    // 需要 loanInfo 通道
 @NeedsVipInfo     // 需要 vipInfo 通道
 @NeedsDataSync("orderInfo")  // 自定义通道
+
+// 创建 Helper（组合模式）
+val channels = DataSyncBindings.getChannels(this.javaClass.name)
+val helper = MPDataSyncHelper.create(webView, channels)
 
 // API
 helper.setUserInfo(data: String)   // 设置用户信息
@@ -208,8 +233,23 @@ helper.setLoanInfo(data: String)   // 设置借款信息
 helper.setVipInfo(data: String)    // 设置会员信息
 helper.setData(channel, data)      // 设置指定通道数据
 helper.notifyPageLoaded()          // 通知页面加载完成，触发推送
+helper.notifyPageLoading()         // 通知页面开始加载
 helper.isAllDataSynced(): Boolean   // 检查是否全部同步完成
 helper.reset()                      // 重置状态
+```
+
+### DataSyncBindings（KSP 自动生成）
+
+KSP 处理器在编译期扫描 `@NeedsUserInfo` 等注解，生成注册表对象：
+
+```kotlin
+// 由 data-sync-processor 模块自动生成
+object DataSyncBindings {
+    fun getChannels(className: String): Set<String> = when (className) {
+        "com.example.LoanActivity" -> setOf("userInfo", "loanInfo")
+        else -> emptySet()
+    }
+}
 ```
 
 ---
@@ -233,7 +273,7 @@ hasMethod(method: string): boolean
 onNativeCallComplete(callbackId: string, result: string): void
 ```
 
-### MPBridgeWeb 组件
+### MPBridgeWeb 组件（可选便捷封装）
 
 ```typescript
 @Entry
@@ -258,6 +298,61 @@ struct MyPage {
   }
 }
 ```
+
+### DsBridgeProxy 与 BridgeUtils（低侵入注入式）
+
+推荐使用原生 `Web` 组件 + 工具注入，侵入性更低：
+
+```typescript
+import { DsBridgeProxy, BridgeUtils, DataSyncHelper, JSBridgeManager } from 'hm_web_library';
+
+@Entry
+@Component
+struct MyPage {
+  private bridgeManager: JSBridgeManager = new JSBridgeManager(true);
+  private dataSyncHelper: DataSyncHelper = new DataSyncHelper(
+    this.bridgeManager, [DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO], true
+  );
+  private dsBridgeProxy: DsBridgeProxy = new DsBridgeProxy(this.bridgeManager);
+  @State controller: webview.WebviewController = new webview.WebviewController();
+  private finalUrl: string = '';
+
+  aboutToAppear(): void {
+    this.dataSyncHelper.setUserInfo('...');
+    this.dataSyncHelper.setLoanInfo('...');
+    this.finalUrl = BridgeUtils.appendPlatformParam('resource://rawfile/demo.html');
+  }
+
+  build() {
+    Web({ src: this.finalUrl, controller: this.controller })
+      .javaScriptAccess(true)
+      .javaScriptProxy({
+        object: this.dsBridgeProxy,
+        name: '_dsbridge',
+        methodList: ['call', 'callAsync', 'hasMethod', 'onNativeCallComplete'],
+        controller: this.controller,
+        asyncResult: false
+      })
+      .onPageBegin(() => {
+        this.bridgeManager.setWebController(this.controller);
+        BridgeUtils.injectBridgeJs(this.controller, getContext(this));
+        this.dataSyncHelper.notifyPageLoading();
+      })
+      .onPageEnd(() => { this.dataSyncHelper.notifyPageLoaded(); })
+  }
+}
+```
+
+**工具类说明：**
+
+| 工具类 | 方法 | 说明 |
+|--------|------|------|
+| `BridgeUtils` | `appendPlatformParam(url): string` | 追加 `?platform=harmony` 查询参数 |
+| `BridgeUtils` | `injectBridgeJs(controller, context): void` | 从 rawfile 读取并注入 `bridge.js` |
+| `DsBridgeProxy` | `call(requestJson): string` | 同步调用代理 |
+| `DsBridgeProxy` | `callAsync(requestJson): string` | 异步调用代理 |
+| `DsBridgeProxy` | `hasMethod(method): boolean` | 方法存在检查 |
+| `DsBridgeProxy` | `onNativeCallComplete(callbackId, result): void` | Native 调用完成回调 |
 
 ### DataSyncHelper
 
@@ -384,8 +479,9 @@ output/
 ### Android
 | 文件 | 职责 |
 |------|------|
-| `android/settings.gradle.kts` | 模块声明：app, library, and_web_library |
-| `android/gradle/libs.versions.toml` | 版本目录（AGP, Kotlin, Gson 等） |
+| `android/settings.gradle.kts` | 模块声明：app, library, and_web_library, data-sync-processor |
+| `android/gradle/libs.versions.toml` | 版本目录（AGP, Kotlin, KSP, Gson 等） |
+| `android/gradle.properties` | Gradle 属性（含 `disallowKotlinSourceSets=false` KSP 兼容） |
 | `android/library/build.gradle.kts` | JsBridge 源码模块构建配置 |
 | `android/library/src/.../BridgeWebView.java` | WebView 继承类，桥接核心 |
 | `android/library/src/.../BridgeHelper.java` | 桥接辅助类，消息队列管理 |
@@ -394,18 +490,26 @@ output/
 | `android/library/src/.../BridgeWebViewClient.java` | WebViewClient，JS 注入 |
 | `android/library/src/.../WebViewJavascriptBridge.js` | 注入 WebView 的 JS 桥接脚本 |
 | `android/and_web_library/build.gradle.kts` | SDK 模块构建配置 |
-| `android/and_web_library/.../MPBridgeWebView.kt` | 业务封装 WebView + 平台参数 + 数据同步集成 |
+| `android/and_web_library/.../MPBridgeWebView.kt` | 业务封装 WebView（final，组合模式） |
 | `android/and_web_library/.../MPBridgeConfig.kt` | 全局配置 |
-| `android/and_web_library/.../MPDataSync.kt` | 注解 + 通道常量 + MPDataSyncHelper 状态管理器 |
+| `android/and_web_library/.../MPDataSync.kt` | 注解 + 通道常量 + MPDataSyncHelper（构造注入） |
+| `android/data-sync-processor/build.gradle.kts` | KSP 处理器模块构建配置（纯 Kotlin/JVM） |
+| `android/data-sync-processor/.../DataSyncSymbolProcessor.kt` | KSP 核心处理器，扫描注解生成注册表 |
+| `android/data-sync-processor/.../DataSyncSymbolProcessorProvider.kt` | KSP Provider（SPI 注册） |
+| `android/data-sync-processor/.../META-INF/services/...SymbolProcessorProvider` | SPI 注册文件 |
+| `android/app/.../DataSyncDemoActivity.kt` | 组合模式示例 Activity（@NeedsUserInfo + @NeedsLoanInfo） |
 
 ### 鸿蒙
 | 文件 | 职责 |
 |------|------|
-| `hm/hm_web_library/src/.../components/MPBridgeWeb.ets` | Web 组件封装 + 平台参数 + 数据同步集成 |
+| `hm/hm_web_library/src/.../components/MPBridgeWeb.ets` | Web 组件封装（可选便捷组件，已提取逻辑到工具类） |
 | `hm/hm_web_library/src/.../bridge/JSBridge.ets` | 桥接管理器，Handler 注册与分发 |
 | `hm/hm_web_library/src/.../bridge/BridgeHandler.ets` | Handler 接口定义 |
 | `hm/hm_web_library/src/.../bridge/BridgeModels.ets` | 数据模型（Request/Response） |
 | `hm/hm_web_library/src/.../bridge/DataSyncHelper.ets` | 通道常量 + DataSyncHelper 状态管理器 |
+| `hm/hm_web_library/src/.../bridge/DsBridgeProxy.ets` | javaScriptProxy 注入对象（独立导出） |
+| `hm/hm_web_library/src/.../bridge/BridgeUtils.ets` | 桥接工具类（appendPlatformParam + injectBridgeJs） |
+| `hm/hm_web_library/Index.ets` | 模块导出入口（含 DsBridgeProxy、BridgeUtils） |
 | `hm/hm_web_library/src/main/resources/rawfile/bridge.js` | JS 端注入代码（window.dsBridge） |
 
 ### 前端
@@ -482,19 +586,21 @@ Native (Android/HarmonyOS)
 ### 10.7 解耦设计
 
 - SDK 提供机制，不含业务逻辑
-- Android: `MPBridgeWebView.callBridgeHandler("syncUserInfo", dataJson)`
-- 鸿蒙: `JSBridgeManager.callJs("syncUserInfo", [dataJson])`
-- 主模块（WebViewForLoan/WebViewForVip/WebViewForThird）仅调用标准方法
+- Android: `MPDataSyncHelper.create(webView, channels)` 后由 `dataSyncHelper.setUserInfo(data)` 推送
+- 鸿蒙: `dataSyncHelper.setUserInfo(data)` → `JSBridgeManager.callJs("syncUserInfo", [data])`
+- Activity / Page 通过组合方式持有 Helper，不再依赖继承
 - SDK 自动注册 Native→JS Handler，主模块无需关心前端接收逻辑
 
 ### 10.8 Native 端数据同步实现
 
-#### Android 端（注解 + 反射）
+#### Android 端（组合模式 + KSP 编译期注入）
 
 | 文件 | 职责 |
 |------|------|
-| `MPDataSync.kt` | 注解定义 + 通道常量 + `MPDataSyncHelper` 状态管理器 |
-| `MPBridgeWebView.kt` | URL 平台参数注入 + `getDataSyncHelper()` / `notifyPageLoaded()` 集成 |
+| `MPDataSync.kt` | 注解定义 + 通道常量 + `MPDataSyncHelper` 状态管理器（构造注入） |
+| `MPBridgeWebView.kt` | final 类，URL 平台参数注入（无数据同步逻辑） |
+| `DataSyncSymbolProcessor.kt` | KSP 处理器，编译期扫描注解生成 `DataSyncBindings` |
+| `DataSyncBindings.kt` | KSP 自动生成，类名→通道集合查表 |
 
 **注解体系：**
 
@@ -505,55 +611,91 @@ Native (Android/HarmonyOS)
 | `@NeedsVipInfo` | vipInfo | syncVipInfo |
 | `@NeedsDataSync(channel)` | 自定义 | sync{Channel} |
 
-**主模块使用方式：**
+**主模块使用方式（组合模式）：**
 ```kotlin
 @NeedsUserInfo
 @NeedsLoanInfo
-class WebViewForLoan(context: Context, attrs: AttributeSet) : MPBridgeWebView(context, attrs)
+class DataSyncDemoActivity : AppCompatActivity() {
+    private lateinit var webView: MPBridgeWebView
+    private lateinit var dataSyncHelper: MPDataSyncHelper
 
-// Activity 中
-webView.loadBridgeUrl("https://example.com/loan")  // 自动追加 ?platform=android
-webView.getDataSyncHelper().setUserInfo("""{"uid":"123","ticket":"abc"}""")
-webView.getDataSyncHelper().setLoanInfo("""{"loanId":"L001","amount":50000}""")
-// WebViewClient.onPageFinished 中调用
-webView.notifyPageLoaded()  // 自动推送已就绪数据
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        webView = MPBridgeWebView(this).apply {
+            webViewClient = object : WebViewClient() {
+                override fun onPageStarted(...) { dataSyncHelper.notifyPageLoading() }
+                override fun onPageFinished(...) { dataSyncHelper.notifyPageLoaded() }
+            }
+        }
+        // KSP 生成的注册表查表获取通道
+        val channels = DataSyncBindings.getChannels(this.javaClass.name)
+        dataSyncHelper = MPDataSyncHelper.create(webView, channels)
+
+        webView.loadBridgeUrl("https://example.com/loan")  // 自动追加 ?platform=android
+        dataSyncHelper.setUserInfo("""{"uid":"123","ticket":"abc"}""")
+        dataSyncHelper.setLoanInfo("""{"loanId":"L001","amount":50000}""")
+    }
+}
 ```
 
+**KSP 处理器机制：**
+- `DataSyncSymbolProcessor` 实现 `SymbolProcessor` 接口
+- `process()` 调用 `resolver.getSymbolsWithAnnotation()` 扫描四种注解
+- 通过 `CodeGenerator` 生成 `DataSyncBindings.kt` 源文件
+- SPI 机制：`META-INF/services/...SymbolProcessorProvider` 注册 Provider
+
 **MPDataSyncHelper 内部机制：**
-- 构造时通过反射读取 WebView 子类继承链上的注解，确定所需通道
+- 构造函数接收 `BridgeWebView` + `Set<String>` 通道集合（无反射）
 - 管理 `SyncState` 状态机：IDLE → LOADING → LOADED → SYNCED
 - `setData()` 设置通道数据，页面已加载时立即推送
 - `notifyPageLoaded()` 触发 `pushPendingData()`，推送所有已就绪未推送的通道
-- 通过 `webView.callBridgeHandler(methodName, data)` 推送到 JS
+- 通过 `webView.callHandler(methodName, data, null)` 推送到 JS
 
-#### 鸿蒙端（直接引入）
+#### 鸿蒙端（原生 Web 组件 + 工具注入）
 
 | 文件 | 职责 |
 |------|------|
 | `DataSyncHelper.ets` | 通道常量 + `DataSyncHelper` 状态管理器（无注解） |
-| `MPBridgeWeb.ets` | URL 平台参数注入 + 自动调用 `notifyPageLoading/Loaded` |
+| `DsBridgeProxy.ets` | `javaScriptProxy` 注入对象（独立导出） |
+| `BridgeUtils.ets` | 桥接工具类（`appendPlatformParam` + `injectBridgeJs`） |
+| `MPBridgeWeb.ets` | 可选便捷封装组件（内部委托给工具类） |
 
-**主模块使用方式：**
+**主模块使用方式（原生 Web + 工具注入）：**
 ```typescript
-private dataSyncHelper: DataSyncHelper = new DataSyncHelper(
-  this.bridgeManager,
-  [DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO],
-  true
-);
+@Entry
+@Component
+struct LoanPage {
+  private bridgeManager: JSBridgeManager = new JSBridgeManager(true);
+  private dataSyncHelper: DataSyncHelper = new DataSyncHelper(
+    this.bridgeManager, [DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO], true
+  );
+  private dsBridgeProxy: DsBridgeProxy = new DsBridgeProxy(this.bridgeManager);
+  @State controller: webview.WebviewController = new webview.WebviewController();
+  private finalUrl: string = '';
 
-build() {
-  MPBridgeWeb({
-    bridgeManager: this.bridgeManager,
-    url: 'https://example.com/loan',  // 自动追加 ?platform=harmony
-    debug: true,
-    dataSyncHelper: this.dataSyncHelper,
-    controller: this.controller
-  })
-}
+  aboutToAppear(): void {
+    this.dataSyncHelper.setUserInfo('{"uid":"123","ticket":"abc"}');
+    this.dataSyncHelper.setLoanInfo('{"loanId":"L001","amount":50000}');
+    this.finalUrl = BridgeUtils.appendPlatformParam('resource://rawfile/demo.html');
+  }
 
-aboutToAppear() {
-  this.dataSyncHelper.setUserInfo('{"uid":"123","ticket":"abc"}');
-  this.dataSyncHelper.setLoanInfo('{"loanId":"L001","amount":50000}');
+  build() {
+    Web({ src: this.finalUrl, controller: this.controller })
+      .javaScriptAccess(true)
+      .javaScriptProxy({
+        object: this.dsBridgeProxy,
+        name: '_dsbridge',
+        methodList: ['call', 'callAsync', 'hasMethod', 'onNativeCallComplete'],
+        controller: this.controller,
+        asyncResult: false
+      })
+      .onPageBegin(() => {
+        this.bridgeManager.setWebController(this.controller);
+        BridgeUtils.injectBridgeJs(this.controller, getContext(this));
+        this.dataSyncHelper.notifyPageLoading();
+      })
+      .onPageEnd(() => { this.dataSyncHelper.notifyPageLoaded(); })
+  }
 }
 ```
 
@@ -561,10 +703,13 @@ aboutToAppear() {
 
 | 维度 | Android | 鸿蒙 |
 |------|---------|------|
-| 通道声明 | 注解 + 反射自动检测 | 构造函数传入 `requiredChannels` |
-| 推送方式 | `callBridgeHandler(method, data)` | `callJs(method, [data])` |
-| 页面状态通知 | 手动调用 `notifyPageLoaded()` | `MPBridgeWeb` 自动在 `onPageBegin/End` 调用 |
-| AOP 支持 | Kotlin 注解 + 运行时反射 | 不支持，直接引入 |
+| 通道声明 | 注解 + KSP 编译期扫描 | 构造函数传入 `requiredChannels` |
+| 注册表 | KSP 生成 `DataSyncBindings` | 无（直接构造传入） |
+| 推送方式 | `webView.callHandler(method, data)` | `callJs(method, [data])` |
+| 页面状态通知 | Activity `WebViewClient` 回调中手动调用 | `Web` 组件 `onPageBegin/End` 回调中调用 |
+| 桥接注入 | `BridgeWebViewClient` 自动注入 | `BridgeUtils.injectBridgeJs()` 手动注入 |
+| 平台参数 | `MPBridgeWebView.loadBridgeUrl()` | `BridgeUtils.appendPlatformParam()` |
+| AOP 支持 | Kotlin 注解 + KSP 编译期处理 | 不支持，直接引入 |
 
 #### Native 状态机
 
@@ -597,10 +742,11 @@ SyncState:
 |------|------|
 | Android Gradle Plugin | 9.0.1 |
 | Gradle | 9.2.1 |
-| Kotlin | 2.0.21 |
+| Kotlin | 2.2.10 (AGP 9.x 内置) |
+| KSP | 2.2.10-2.0.2 |
 | compileSdk | 36 (minorApiLevel=1) |
 | minSdk | 24 |
-| Java | 11 |
+| Java / JVM Target | 21 |
 | Gson | 2.10.1 |
 | Vite | ^5.4.21 |
 | TypeScript | ~5.6.0 |

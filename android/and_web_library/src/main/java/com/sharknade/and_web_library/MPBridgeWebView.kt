@@ -34,31 +34,15 @@ import com.github.lzyzsd.jsbridge.OnBridgeCallback
  * webView.loadBridgeUrl("https://your-page.com")
  * ```
  */
-open class MPBridgeWebView @JvmOverloads constructor(
+class MPBridgeWebView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : BridgeWebView(context, attrs) {
-
-    /** 数据同步辅助器（懒加载，子类通过注解自动配置） */
-    private var dataSyncHelper: MPDataSyncHelper? = null
 
     init {
         if (MPBridgeConfig.debug) {
             Log.d(MPBridgeConfig.LOG_TAG, "MPBridgeWebView initialized in debug mode")
         }
-        // 设置 WebViewClient 以便自动注入桥接和处理页面加载回调
-        initWebViewClient()
-    }
-
-    /**
-     * 初始化 WebViewClient
-     * 如果外部未自定义 WebViewClient，则使用内部的 MPBridgeWebViewClient
-     * 自动处理页面加载状态通知
-     */
-    private fun initWebViewClient() {
-        // BridgeWebView 的父类已设置 BridgeWebViewClient
-        // 这里补充页面加载完成/开始的通知逻辑
-        // 外部可通过 setWebViewClient 覆盖，但建议继承 MPBridgeWebViewClient
     }
 
     /**
@@ -139,8 +123,6 @@ open class MPBridgeWebView @JvmOverloads constructor(
         if (MPBridgeConfig.debug) {
             Log.d(MPBridgeConfig.LOG_TAG, "loadBridgeUrl: $url → $finalUrl")
         }
-        // 通知数据同步辅助器页面开始加载
-        getDataSyncHelper().notifyPageLoading()
         loadUrl(finalUrl)
     }
 
@@ -154,47 +136,4 @@ open class MPBridgeWebView @JvmOverloads constructor(
         return "$url${separator}platform=android"
     }
 
-    // ========================
-    // 数据同步辅助器集成
-    // ========================
-
-    /**
-     * 获取数据同步辅助器
-     * 懒加载创建，通过反射读取子类注解自动配置所需数据通道
-     *
-     * 主模块使用方式：
-     * ```kotlin
-     * @NeedsUserInfo
-     * @NeedsLoanInfo
-     * class WebViewForLoan(context: Context, attrs: AttributeSet) : MPBridgeWebView(context, attrs)
-     *
-     * // 在 Activity 中
-     * webView.getDataSyncHelper().setUserInfo("""{"uid":"123","ticket":"abc"}""")
-     * webView.getDataSyncHelper().setLoanInfo("""{"loanId":"L001","amount":50000}""")
-     * ```
-     */
-    fun getDataSyncHelper(): MPDataSyncHelper {
-        if (dataSyncHelper == null) {
-            dataSyncHelper = MPDataSyncHelper.create(this)
-        }
-        return dataSyncHelper!!
-    }
-
-    /**
-     * 通知页面加载完成
-     * 应在 WebViewClient.onPageFinished() 中调用
-     * 触发数据同步辅助器推送已就绪的业务数据到前端
-     */
-    fun notifyPageLoaded() {
-        getDataSyncHelper().notifyPageLoaded()
-    }
-
-    /**
-     * 通知页面开始加载
-     * 应在 WebViewClient.onPageStarted() 中调用
-     * 重置数据推送状态（新页面需要重新推送）
-     */
-    fun notifyPageLoading() {
-        getDataSyncHelper().notifyPageLoading()
-    }
 }

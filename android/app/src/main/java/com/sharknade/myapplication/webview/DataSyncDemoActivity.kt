@@ -11,29 +11,40 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.sharknade.and_web_library.MPBridgeConfig
+import com.sharknade.and_web_library.MPBridgeWebView
+import com.sharknade.and_web_library.MPDataSyncHelper
+import com.sharknade.and_web_library.NeedsUserInfo
+import com.sharknade.and_web_library.NeedsLoanInfo
 import com.sharknade.and_web_library.SyncState
+import com.sharknade.and_web_library.generated.DataSyncBindings
 
 /**
- * 数据同步验证 Activity
+ * 数据同步验证 Activity（组合模式 + KSP 注入）
  *
  * 验证 Android 端 MPDataSyncHelper 的完整流程：
  *
- * 1. 创建带注解的 WebViewForLoan（@NeedsUserInfo + @NeedsLoanInfo）
- * 2. MPDataSyncHelper 通过反射读取注解，确定所需通道为 {userInfo, loanInfo}
- * 3. 加载页面（自动追加 ?platform=android）
- * 4. 页面加载完成后自动推送已就绪的数据
+ * 1. Activity 标注 @NeedsUserInfo + @NeedsLoanInfo
+ * 2. KSP 编译期生成 DataSyncBindings，运行时查表获取通道 {userInfo, loanInfo}
+ * 3. Activity 持有 MPBridgeWebView 实例（组合，非继承）
+ * 4. Activity 持有 MPDataSyncHelper 实例（外部创建，非 WebView 内部懒加载）
+ * 5. 页面加载完成后自动推送已就绪的数据
  *
  * 验证场景：
  * - 场景A：页面加载前设置数据 → 页面加载完成后立即推送
  * - 场景B：页面加载后设置数据 → setData 时立即推送
  */
+@NeedsUserInfo
+@NeedsLoanInfo
 class DataSyncDemoActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "DataSyncDemo"
     }
 
-    private lateinit var webView: WebViewForLoan
+    /** 组合持有 WebView（非继承） */
+    private lateinit var webView: MPBridgeWebView
+    /** 外部创建的数据同步辅助器 */
+    private lateinit var dataSyncHelper: MPDataSyncHelper
     private lateinit var statusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,26 +95,26 @@ class DataSyncDemoActivity : AppCompatActivity() {
         }
         rootLayout.addView(statusText)
 
-        // WebView
-        webView = WebViewForLoan(this).apply {
+        // 组合模式：直接创建 MPBridgeWebView 实例
+        webView = MPBridgeWebView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0,
                 1f
             )
-            // 设置 WebViewClient，在页面加载完成时通知 DataSyncHelper
+            // 设置 WebViewClient，在页面加载回调中通知 DataSyncHelper
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     Log.d(TAG, "onPageStarted: $url")
-                    webView.notifyPageLoading()
+                    dataSyncHelper.notifyPageLoading()
                     appendStatus("页面开始加载: $url")
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     Log.d(TAG, "onPageFinished: $url")
                     // 通知页面加载完成 → 触发 pushPendingData
-                    webView.notifyPageLoaded()
-                    val state = webView.getDataSyncHelper().getSyncState()
+                    dataSyncHelper.notifyPageLoaded()
+                    val state = dataSyncHelper.getSyncState()
                     appendStatus("页面加载完成, syncState=$state")
                 }
             }
@@ -112,13 +123,17 @@ class DataSyncDemoActivity : AppCompatActivity() {
 
         setContentView(rootLayout)
 
-        // 打印注解检测结果
-        val channels = webView.getDataSyncHelper().getRequiredChannels()
-        Log.i(TAG, "=== DataSyncHelper 验证 ===")
-        Log.i(TAG, "WebView 类: ${webView.javaClass.simpleName}")
-        Log.i(TAG, "注解检测到的所需通道: $channels")
-        Log.i(TAG, "初始状态: ${webView.getDataSyncHelper().getSyncState()}")
-        appendStatus("WebViewForLoan 注解检测 → 通道: $channels")
+        // KSP 生成的注册表：编译期扫描 @NeedsUserInfo + @NeedsLoanInfo 注解
+        // 运行时直接查表获取所需通道，无反射
+        val channels = DataSyncBindings.getChannels(this.javaClass.name)
+        dataSyncHelper = MPDataSyncHelper.create(webView, channels)
+
+        // 打印 KSP 注入结果
+        Log.i(TAG, "=== DataSyncHelper 验证（组合模式 + KSP） ===")
+        Log.i(TAG, "Activity 类: ${this.javaClass.simpleName}")
+        Log.i(TAG, "KSP 注入的所需通道: $channels")
+        Log.i(TAG, "初始状态: ${dataSyncHelper.getSyncState()}")
+        appendStatus("KSP 注入 → 通道: $channels")
     }
 
     /**
@@ -133,13 +148,13 @@ class DataSyncDemoActivity : AppCompatActivity() {
         val userInfoJson = """{"uid":"user_001","ticket":"ticket_abc123"}"""
         val loanInfoJson = """{"loanId":"L20240001","amount":50000,"term":12}"""
 
-        webView.getDataSyncHelper().setUserInfo(userInfoJson)
-        webView.getDataSyncHelper().setLoanInfo(loanInfoJson)
+        dataSyncHelper.setUserInfo(userInfoJson)
+        dataSyncHelper.setLoanInfo(loanInfoJson)
 
         Log.i(TAG, "setUserInfo: $userInfoJson")
         Log.i(TAG, "setLoanInfo: $loanInfoJson")
-        Log.i(TAG, "hasData(userInfo): ${webView.getDataSyncHelper().hasData("userInfo")}")
-        Log.i(TAG, "isDataSynced(userInfo): ${webView.getDataSyncHelper().isDataSynced("userInfo")}")
+        Log.i(TAG, "hasData(userInfo): ${dataSyncHelper.hasData("userInfo")}")
+        Log.i(TAG, "isDataSynced(userInfo): ${dataSyncHelper.isDataSynced("userInfo")}")
         appendStatus("已设置 userInfo + loanInfo（页面未加载）")
 
         // 2. 加载页面 → 自动追加 ?platform=android
@@ -156,26 +171,28 @@ class DataSyncDemoActivity : AppCompatActivity() {
         Log.i(TAG, "=== 场景B：先加载页面，后设数据 ===")
         appendStatus("\n--- 场景B ---")
 
-        // 1. 加载页面（不预设数据）
+        // 1. 通知页面加载状态
+        dataSyncHelper.notifyPageLoading()
+        // 2. 加载页面（不预设数据）
         webView.loadBridgeUrl("file:///android_asset/demo.html")
         appendStatus("loadBridgeUrl → 加载中（无数据）")
 
-        // 2. 延迟 3 秒后设置数据（模拟异步获取业务数据）
+        // 3. 延迟 3 秒后设置数据（模拟异步获取业务数据）
         webView.postDelayed({
             val userInfoJson = """{"uid":"user_002","ticket":"ticket_xyz789"}"""
             val loanInfoJson = """{"loanId":"L20240002","amount":100000,"term":24}"""
 
             Log.i(TAG, "延迟设置数据...")
-            webView.getDataSyncHelper().setUserInfo(userInfoJson)
-            webView.getDataSyncHelper().setLoanInfo(loanInfoJson)
+            dataSyncHelper.setUserInfo(userInfoJson)
+            dataSyncHelper.setLoanInfo(loanInfoJson)
 
             Log.i(TAG, "setUserInfo: $userInfoJson")
             Log.i(TAG, "setLoanInfo: $loanInfoJson")
 
             // setData 时 syncState=LOADED → 立即触发 pushPendingData
-            val state = webView.getDataSyncHelper().getSyncState()
+            val state = dataSyncHelper.getSyncState()
             Log.i(TAG, "setData 后 syncState=$state")
-            Log.i(TAG, "isAllDataSynced: ${webView.getDataSyncHelper().isAllDataSynced()}")
+            Log.i(TAG, "isAllDataSynced: ${dataSyncHelper.isAllDataSynced()}")
             appendStatus("3秒后设置数据 → 立即推送（syncState=$state）")
         }, 3000)
     }

@@ -1,6 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
-//    alias(libs.plugins.kotlin.android)
+//    alias(libs.plugins.kotlin.android)  // AGP 9.x 已内置 Kotlin
 }
 
 android {

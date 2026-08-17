@@ -29,3 +29,4 @@ rootProject.name = "My Application"
 include(":app")
 include(":library")
 include(":and_web_library")
+include(":data-sync-processor")

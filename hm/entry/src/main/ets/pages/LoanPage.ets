@@ -1,17 +1,27 @@
 /**
- * LoanPage — 借款页面数据同步验证
+ * LoanPage — 借款页面数据同步验证（原生 Web + 工具注入）
  *
  * 验证鸿蒙端 DataSyncHelper 的完整流程：
  * 1. 创建 DataSyncHelper 声明所需通道 [USER_INFO, LOAN_INFO]
  * 2. aboutToAppear 中设置业务数据（页面加载前）
- * 3. MPBridgeWeb 自动追加 ?platform=harmony 并加载页面
- * 4. MPBridgeWeb onPageEnd 自动调用 notifyPageLoaded
+ * 3. 使用原生 Web 组件 + BridgeUtils 工具注入桥接逻辑
+ * 4. onPageEnd 时通知 DataSyncHelper 触发数据推送
  * 5. DataSyncHelper.pushPendingData → callJs("syncUserInfo"/"syncLoanInfo")
+ *
+ * 与旧版差异：
+ * - 不使用 MPBridgeWeb 封装组件，直接使用原生 Web 组件
+ * - 通过 DsBridgeProxy + BridgeUtils 工具注入桥接逻辑，侵入性更低
  */
 
 import { webview } from '@kit.ArkWeb';
 import { router } from '@kit.ArkUI';
-import { MPBridgeWeb, JSBridgeManager, DataSyncHelper, DataSyncChannel } from 'hm_web_library';
+import {
+  JSBridgeManager,
+  DataSyncHelper,
+  DataSyncChannel,
+  DsBridgeProxy,
+  BridgeUtils
+} from 'hm_web_library';
 
 @Entry
 @Component
@@ -22,13 +32,17 @@ struct LoanPage {
     [DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO],
     true
   );
+  private dsBridgeProxy: DsBridgeProxy = new DsBridgeProxy(this.bridgeManager);
   @State controller: webview.WebviewController = new webview.WebviewController();
   @State statusText: string = '准备中...';
+  private finalUrl: string = '';
 
   aboutToAppear(): void {
     // 场景A：页面加载前设置数据
     this.dataSyncHelper.setUserInfo('{"uid":"user_001","ticket":"ticket_abc123"}');
     this.dataSyncHelper.setLoanInfo('{"loanId":"L20240001","amount":50000,"term":12}');
+    // 计算最终 URL（追加 platform=harmony）
+    this.finalUrl = BridgeUtils.appendPlatformParam('resource://rawfile/demo.html');
     this.statusText = '数据已设置 → 加载页面中';
   }
 
@@ -57,14 +71,27 @@ struct LoanPage {
         .padding(12)
         .width('100%')
 
-      // WebView 区域
-      MPBridgeWeb({
-        bridgeManager: this.bridgeManager,
-        url: 'resource://rawfile/demo.html',
-        debug: true,
-        dataSyncHelper: this.dataSyncHelper,
-        controller: this.controller
-      })
+      // 原生 Web 组件 + 工具注入
+      Web({ src: this.finalUrl, controller: this.controller })
+        .javaScriptAccess(true)
+        .domStorageAccess(true)
+        .javaScriptProxy({
+          object: this.dsBridgeProxy,
+          name: '_dsbridge',
+          methodList: ['call', 'callAsync', 'hasMethod', 'onNativeCallComplete'],
+          controller: this.controller
+        })
+        .onPageBegin(() => {
+          // 注入 bridge.js + 通知页面开始加载
+          this.bridgeManager.setWebController(this.controller);
+          BridgeUtils.injectBridgeJs(this.controller, getContext(this));
+          this.dataSyncHelper.notifyPageLoading();
+        })
+        .onPageEnd(() => {
+          // 通知页面加载完成 → 触发数据推送
+          this.dataSyncHelper.notifyPageLoaded();
+          this.statusText = '页面已加载 → 数据已推送';
+        })
         .layoutWeight(1)
         .width('100%')
     }
