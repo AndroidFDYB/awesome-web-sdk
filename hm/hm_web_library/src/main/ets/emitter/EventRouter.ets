@@ -30,8 +30,8 @@
  * ```
  */
 
-import { JSBridgeManager } from './JSBridge';
-import { SyncBridgeHandler } from './BridgeHandler';
+import { JSBridgeManager } from '../bridge/JSBridge';
+import { SyncBridgeHandler } from '../bridge/BridgeHandler';
 
 /** postToNative 调用参数 */
 interface PostToNativeData {

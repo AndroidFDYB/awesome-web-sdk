@@ -87,14 +87,14 @@ WebView A（如 Loan 页面）
 - 更新 `src/index.ts`：导出 emitter 模块
 
 ### Android SDK
-- 新增 `MPEventRouter.kt`：跨 WebView 事件路由器
+- 新增 `emitter/MPEventRouter.kt`：跨 WebView 事件路由器
   - `registerWebView(container, webView)` 注册 WebView 并自动注册 postToNative Handler
   - `unregisterWebView(container)` 注销清理
   - `onHostEvent(handler)` 注册 host 事件处理回调
   - 解析4级事件，按第一级路由到目标 WebView 的 postToWeb
 
 ### 鸿蒙 SDK
-- 新增 `bridge/EventRouter.ets`：跨 WebView 事件路由器（与 Android 逻辑对等）
+- 新增 `emitter/EventRouter.ets`：跨 WebView 事件路由器（与 Android 逻辑对等）
   - `registerWebView(container, bridgeManager)` 注册并自动注册 postToNative Handler
   - `unregisterWebView(container)` 注销清理
   - `onHostEvent(handler)` 注册 host 事件处理回调

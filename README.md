@@ -15,6 +15,8 @@ MP-SDK 是一套面向金融/会员业务场景的跨平台 JSBridge SDK。它�
 
 - **Proto 驱动 Codegen**：单一 `.proto` 文件定义数据通道，三端自动生成注解/装饰器/常量/setter
 - **等待唤醒数据同步**：解决 Native→Web 大数据量传递的时序问题，请求自动阻塞直到数据就绪
+- **AppLink Scheme 跳转**：统一 Scheme 协议，三端一致的页面跳转能力
+- **跨 WebView 事件路由**：四级消息格式（`container:scope:model:event`），Native 路由器实现跨 WebView emitter 通信
 - **零运行时前端依赖**：自动检测平台，无需 `protobuf.js` 或 `dsbridge` 包
 - **Android 编译期注入**：KSP 扫描 `@Needs*` 注解，无运行时反射开销
 - **鸿蒙低侵入集成**：原生 Web 组件 + 静态工具类，页面完全掌控配置
@@ -22,7 +24,20 @@ MP-SDK 是一套面向金融/会员业务场景的跨平台 JSBridge SDK。它�
 
 ---
 
+## 功能模块
+
+| 模块 | Android | 鸿蒙 | 前端 SDK | 说明 |
+|------|---------|------|----------|------|
+| **Bridge** | `MPBridgeWebView` | `JSBridgeManager` | `bridge.ts` | 平台检测 + 双协议适配（Android WebViewJavascriptBridge / 鸿蒙 dsBridge） |
+| **DataSync** | `MPDataSyncHelper` + KSP 注解 | `DataSyncHelper` | `data-sync/` | 等待唤醒数据同步，Proto 驱动，三端自动生成通道 |
+| **AppLink** | `applink/` 子包 | `applink/` 目录 | `app-link/` 目录 | Scheme 协议解析与页面跳转，统一 `mpapp://` 前缀 |
+| **Emitter** | `emitter/` 子包 | `emitter/` 目录 | `emitter/` 目录 | 跨 WebView 事件路由，四级消息格式 `container:scope:model:event` |
+
+---
+
 ## 架构概览
+
+### Codegen 流程
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -46,6 +61,55 @@ MP-SDK 是一套面向金融/会员业务场景的跨平台 JSBridge SDK。它�
     └─────────────┘   └─────────────┘   └─────────────┘
 ```
 
+### 功能模块架构
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                            MP-SDK 功能模块                              │
+├───────────┬───────────────┬───────────────┬───────────────────────────┤
+│  Bridge   │  DataSync     │  AppLink      │  Emitter                  │
+│  (通信核心) │  (数据同步)    │  (Scheme 跳转) │  (跨 WebView 事件路由)     │
+│  平台检测  │  等待唤醒机制  │  URL 解析     │  四级消息格式              │
+│  双协议适配 │  Proto 驱动   │  页面跳转     │  Native 路由分发           │
+└─────┬─────┴───────┬───────┴───────┬───────┴───────────┬──────────────┘
+      │             │               │                   │
+      └─────────────┴───────────────┴───────────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              │               │               │
+        ┌─────▼─────┐  ┌─────▼─────┐  ┌─────▼─────┐
+        │  Android   │  │  Vue Web  │  │ HarmonyOS │
+        │  SDK (AAR) │  │  SDK (TGZ)│  │  SDK (HAR) │
+        └───────────┘  └───────────┘  └───────────┘
+```
+
+### Emitter 跨 WebView 通信流程
+
+```
+WebViewForVip                          WebViewForLoan
+┌─────────────────┐                   ┌─────────────────┐
+│  Vue App (VIP)   │                   │  Vue App (Loan) │
+│       │          │                   │       │         │
+│  emitter.emit(   │     postToNative  │       │         │
+│  'loan:buy:      ├──────────────────▶│       │         │
+│   success:done') │                   │       │         │
+│       ▲          │                   │       │         │
+│       │          │     postToWeb     │       ▼         │
+│       │          │◀──────────────────┤  emitter.dispatch│
+│       │          │                   │  (loan:buy:...) │
+│  emitter.on(     │                   │                 │
+│  'loan:buy:      │                   └─────────────────┘
+│   success:done') │                          ▲
+└─────────────────┘                          │
+                                             │
+                    ┌────────────────┐       │
+                    │  Native 端     │───────┘
+                    │  MPEventRouter │
+                    │  / EventRouter │
+                    │  (路由分发)     │
+                    └────────────────┘
+```
+
 ---
 
 ## 工程结构
@@ -58,7 +122,9 @@ mp_sdk/
 │   │   └── custom/                 # 集成方扩展通道（可选）
 │   ├── proto-codegen/              # 共享 TS Proto 解析器
 │   ├── Design.md                   # 架构设计文档
-│   └── Wiki.md                     # 架构变更记录
+│   ├── Wiki.md                     # 架构变更记录
+│   ├── propersal_applink.md        # AppLink 需求文档
+│   └── propersal-emittor.md        # Emitter 需求文档
 │
 ├── specsv2/                        # SSD 规范驱动开发文档
 │   ├── proposal.md                 # 需求 + 功能模块 + 接口 + 任务 DAG
@@ -69,17 +135,50 @@ mp_sdk/
 ├── android/                        # Android SDK 工程
 │   ├── library/                    # JsBridge 源码模块（Java）
 │   ├── and_web_library/            # Android SDK 模块（Kotlin → AAR）
+│   │   └── src/main/java/com/sharknade/and_web_library/
+│   │       ├── MPBridgeWebView.kt  # WebView + JSBridge 核心
+│   │       ├── MPBridgeConfig.kt   # 全局配置
+│   │       ├── MPDataSync.kt       # 数据同步核心
+│   │       ├── applink/            # ├ AppLink Scheme 跳转模块
+│   │       │   ├── AppLinkParams.kt
+│   │       │   ├── AppLinkParser.kt
+│   │       │   └── AppLinkHandler.kt
+│   │       └── emitter/            # └ 跨 WebView 事件路由模块
+│   │           └── MPEventRouter.kt
 │   ├── data-sync-processor/        # KSP 注解处理器（纯 JVM）
 │   ├── proto-codegen/              # Proto 解析器（纯 JVM）
 │   └── app/                        # 示例应用
 │
 ├── hm/                             # 鸿蒙 SDK 工程
 │   └── hm_web_library/             # 鸿蒙 SDK 模块（ArkTS → HAR）
+│       └── src/main/ets/
+│           ├── bridge/             # JSBridge 通信核心
+│           │   ├── JSBridge.ets
+│           │   ├── BridgeHandler.ets
+│           │   ├── BridgeModels.ets
+│           │   ├── DataSyncHelper.ets
+│           │   └── DsBridgeProxy.ets
+│           ├── applink/            # ├ AppLink Scheme 跳转模块
+│           │   ├── AppLinkParams.ets
+│           │   ├── AppLinkParser.ets
+│           │   └── AppLinkHandler.ets
+│           └── emitter/            # └ 跨 WebView 事件路由模块
+│               └── EventRouter.ets
 │
 ├── vue-web-sdk/                    # 前端 SDK（TypeScript → TGZ）
-│   ├── src/bridge.ts               # 核心：平台检测 + 双协议适配
-│   ├── src/data-sync/              # 数据同步中间件
-│   └── src/proto-plugin/           # Vite Proto Codegen 插件
+│   └── src/
+│       ├── bridge.ts               # 核心：平台检测 + 双协议适配
+│       ├── platform.ts             # 平台检测
+│       ├── types.ts                # 类型定义
+│       ├── data-sync/              # 数据同步中间件
+│       ├── app-link/               # ├ AppLink Scheme 跳转模块
+│       │   ├── index.ts
+│       │   └── types.ts
+│       ├── emitter/                # └ 跨 WebView 事件路由模块
+│       │   ├── emitter.ts
+│       │   ├── types.ts
+│       │   └── index.ts
+│       └── proto-plugin/          # Vite Proto Codegen 插件
 │
 ├── vue-web/                        # 前端示例应用（Vue 3 + Vite）
 ├── scripts/                        # 跨平台构建脚本
@@ -199,6 +298,78 @@ Web({ src: url, controller: controller })
 5. Native 页面加载完成 → DataSyncHelper 推送数据 → JSBridge callHandler
 6. 前端 SDK 接收数据 → DataSyncManager 唤醒等待队列
 7. 拦截器注入数据到请求 → HTTP 请求发出
+```
+
+---
+
+## 跨 WebView Emitter 通信
+
+### 四级消息格式
+
+```
+<containerName>:<scope>:<vueModelName>:<vueEventName>
+```
+
+| 级别 | 字段 | 说明 |
+|------|------|------|
+| 1 | container | 目标容器：`vip` / `loan` / `lead` / `common` / `host` |
+| 2 | scope | 业务域标识 |
+| 3 | model | Vue 组件/模块名 |
+| 4 | event | 事件名 |
+
+### 容器名映射
+
+| 容器名 | 目标 WebView | 说明 |
+|--------|-------------|------|
+| `vip` | WebViewForVip | VIP 会员页面 |
+| `loan` | WebViewForLoan | 借款页面 |
+| `lead` | WebViewForLead | 线索页面 |
+| `common` | WebViewForCommon | 通用页面 |
+| `host` | Native 端 | 直接消费，不转发 |
+
+### 前端 SDK 使用
+
+```typescript
+import { emitter } from '@mp-sdk/bridge';
+
+// 监听跨 WebView 事件
+emitter.on('vip:vipbuy:success:two', (data) => {
+  console.log('VIP 买入成功', data);
+});
+
+// 发送事件到 loan 容器
+emitter.emit('loan:buy:success:done', { orderId: 123 });
+
+// 监听 Native host 事件
+emitter.on('host:notify:appState:change', (data) => {
+  console.log('App 状态变化', data);
+});
+```
+
+### Native SDK 使用
+
+**Android:**
+```kotlin
+val eventRouter = MPEventRouter()
+
+eventRouter.registerWebView(MPEventRouter.CONTAINER_VIP, vipWebView)
+eventRouter.registerWebView(MPEventRouter.CONTAINER_LOAN, loanWebView)
+
+eventRouter.onHostEvent { event, data ->
+    Log.d("EventRouter", "Host event: $event")
+}
+```
+
+**鸿蒙:**
+```typescript
+const eventRouter = new EventRouter(true);
+
+eventRouter.registerWebView(EventRouter.CONTAINER_VIP, vipBridgeManager);
+eventRouter.registerWebView(EventRouter.CONTAINER_LOAN, loanBridgeManager);
+
+eventRouter.onHostEvent((event: string, data: string) => {
+  console.log(`Host event: ${event}`);
+});
 ```
 
 ---

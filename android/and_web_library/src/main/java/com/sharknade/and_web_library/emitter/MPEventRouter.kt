@@ -1,7 +1,9 @@
-package com.sharknade.and_web_library
+package com.sharknade.and_web_library.emitter
 
 import android.util.Log
 import com.github.lzyzsd.jsbridge.OnBridgeCallback
+import com.sharknade.and_web_library.MPBridgeConfig
+import com.sharknade.and_web_library.MPBridgeWebView
 import org.json.JSONObject
 
 /**
