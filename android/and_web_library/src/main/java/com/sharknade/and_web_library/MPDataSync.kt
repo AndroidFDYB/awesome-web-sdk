@@ -4,83 +4,24 @@ import android.util.Log
 import com.github.lzyzsd.jsbridge.BridgeWebView
 
 // ========================
-// 注解定义
+// 通用注解（非 proto 驱动，用于临时自定义通道）
 // ========================
 
-/**
- * 标记 Activity / Fragment 需要 UserInfo（uid + ticket）数据同步
- *
- * 使用方式（组合模式 + KSP 自动注入）：
- * ```kotlin
- * @NeedsUserInfo
- * @NeedsLoanInfo
- * class LoanActivity : AppCompatActivity() {
- *     private lateinit var webView: MPBridgeWebView
- *     private lateinit var dataSyncHelper: MPDataSyncHelper
- *
- *     override fun onCreate(savedInstanceState: Bundle?) {
- *         super.onCreate(savedInstanceState)
- *         webView = MPBridgeWebView(this)
- *         val channels = DataSyncBindings.getChannels(this.javaClass.name)
- *         dataSyncHelper = MPDataSyncHelper.create(webView, channels)
- *     }
- * }
- * ```
- */
-@Target(AnnotationTarget.CLASS)
-@Retention(AnnotationRetention.RUNTIME)
-annotation class NeedsUserInfo
-
-/**
- * 标记 Activity / Fragment 需要 LoanInfo（借款信息）数据同步
- */
-@Target(AnnotationTarget.CLASS)
-@Retention(AnnotationRetention.RUNTIME)
-annotation class NeedsLoanInfo
-
-/**
- * 标记 Activity / Fragment 需要 VipInfo（会员信息）数据同步
- */
-@Target(AnnotationTarget.CLASS)
-@Retention(AnnotationRetention.RUNTIME)
-annotation class NeedsVipInfo
+// 注：@NeedsUserInfo / @NeedsLoanInfo / @NeedsVipInfo 等标准通道注解
+// 由 ProtoCodegenTask 从 specs/proto/channels.proto 自动生成。
+// 参见 build/generated/proto/kotlin/MPDataSyncAnnotations.kt
 
 /**
  * 通用数据同步注解，用于标记自定义数据通道
+ *
+ * 此注解用于 proto 未定义的临时通道。
+ * proto 定义的标准通道请使用生成的 @Needs* 注解。
  *
  * @param channel 数据通道名称，如 "orderInfo"
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class NeedsDataSync(val channel: String)
-
-// ========================
-// 通道常量
-// ========================
-
-/** 标准数据通道名称 */
-object DataSyncChannel {
-    const val USER_INFO = "userInfo"
-    const val LOAN_INFO = "loanInfo"
-    const val VIP_INFO = "vipInfo"
-}
-
-/** Native → JS 推送数据时调用的 JSBridge 方法名 */
-object DataSyncMethod {
-    const val SYNC_USER_INFO = "syncUserInfo"
-    const val SYNC_LOAN_INFO = "syncLoanInfo"
-    const val SYNC_VIP_INFO = "syncVipInfo"
-
-    /** 根据通道名获取对应的 JSBridge 方法名 */
-    fun fromChannel(channel: String): String {
-        return when (channel) {
-            DataSyncChannel.USER_INFO -> SYNC_USER_INFO
-            DataSyncChannel.LOAN_INFO -> SYNC_LOAN_INFO
-            DataSyncChannel.VIP_INFO -> SYNC_VIP_INFO
-            else -> "sync${channel.replaceFirstChar { it.uppercase() }}"
-        }
-    }
-}
 
 // ========================
 // WebView 同步状态
@@ -222,14 +163,9 @@ class MPDataSyncHelper private constructor(
     // 设置业务数据
     // ========================
 
-    /** 设置用户信息数据（uid + ticket） */
-    fun setUserInfo(data: String) = setData(DataSyncChannel.USER_INFO, data)
-
-    /** 设置借款信息数据 */
-    fun setLoanInfo(data: String) = setData(DataSyncChannel.LOAN_INFO, data)
-
-    /** 设置会员信息数据 */
-    fun setVipInfo(data: String) = setData(DataSyncChannel.VIP_INFO, data)
+    // 注：setUserInfo / setLoanInfo / setVipInfo 等便捷 setter
+    // 由 ProtoCodegenTask 从 specs/proto/channels.proto 自动生成为扩展函数。
+    // 参见 build/generated/proto/kotlin/MPDataSyncHelperSetters.kt
 
     /**
      * 设置指定通道的业务数据

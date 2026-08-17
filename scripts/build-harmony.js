@@ -45,6 +45,13 @@ if (!fs.existsSync(HVIGORW_JS)) {
 }
 
 try {
+  // 先运行 proto codegen 生成 ArkTS 源码
+  console.log('[Build] Running proto codegen...');
+  execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'proto-codegen-harmony.js')], {
+    cwd: ROOT,
+    stdio: 'inherit',
+  });
+
   // 使用 DevEco Studio 的 node 执行 hvigorw.js
   // 构建 hm_web_library 模块的 HAR 产物
   const args = [

@@ -12,7 +12,7 @@
  */
 
 import type { DataChannelConfig, DataSyncManagerConfig, ChannelState } from './types';
-import { STANDARD_CHANNEL_CONFIGS } from './types';
+import { STANDARD_CHANNEL_CONFIGS } from './generated/config.gen';
 
 /** 等待队列项 */
 interface Waiter {

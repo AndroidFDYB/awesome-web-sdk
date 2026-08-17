@@ -1,29 +1,62 @@
-const y = {
-  USER_INFO: "userInfo",
-  LOAN_INFO: "loanInfo",
-  VIP_INFO: "vipInfo"
-}, b = [
+const M = "platform", B = ["android", "harmony", "web"];
+function m() {
+  if (typeof window > "u" || !window.location)
+    return null;
+  const e = new URLSearchParams(window.location.search).get(M);
+  return e && B.includes(e) ? e : null;
+}
+function b() {
+  if (typeof window > "u")
+    return "unknown";
+  const n = window;
+  return n.WebViewJavascriptBridge ? "android" : n.__harmony_bridge && n.dsBridge ? "harmony" : "web";
+}
+function w() {
+  const n = m();
+  return n || b();
+}
+function L() {
+  const n = w();
+  return n === "android" || n === "harmony";
+}
+function V() {
+  var e;
+  const n = typeof window < "u" ? window : null;
+  return {
+    urlPlatform: m(),
+    windowPlatform: b(),
+    finalPlatform: w(),
+    hasAndroidBridge: !!(n != null && n.WebViewJavascriptBridge),
+    hasHarmonyBridge: !!(n != null && n.__harmony_bridge && (n != null && n.dsBridge)),
+    url: ((e = n == null ? void 0 : n.location) == null ? void 0 : e.href) ?? null
+  };
+}
+const k = {
+  UserInfo: "userInfo",
+  LoanInfo: "loanInfo",
+  VipInfo: "vipInfo"
+}, A = [
   {
-    name: y.USER_INFO,
+    name: "userInfo",
     nativeMethod: "syncUserInfo",
     injectTo: "headers",
     headerMap: { uid: "X-Uid", ticket: "X-Ticket" },
     timeout: 1e4
   },
   {
-    name: y.LOAN_INFO,
+    name: "loanInfo",
     nativeMethod: "syncLoanInfo",
     injectTo: "body",
     timeout: 1e4
   },
   {
-    name: y.VIP_INFO,
+    name: "vipInfo",
     nativeMethod: "syncVipInfo",
     injectTo: "body",
     timeout: 1e4
   }
 ];
-class M {
+class T {
   constructor(e, t) {
     this.state = { data: null, ready: !1, arrivedAt: null }, this.waiters = [], this.config = e, this.managerConfig = t;
   }
@@ -82,7 +115,7 @@ class M {
     this.managerConfig.debug && console.log(`[DataSync:${this.managerConfig.logTag ?? "MPBridge"}] ${e}`);
   }
 }
-class B {
+class $ {
   constructor(e = {}) {
     this.channels = /* @__PURE__ */ new Map(), this.config = {
       defaultTimeout: 1e4,
@@ -90,7 +123,7 @@ class B {
       logTag: "MPBridge",
       ...e
     };
-    for (const t of b)
+    for (const t of A)
       this.registerChannel(t);
   }
   /**
@@ -98,7 +131,7 @@ class B {
    * 如果通道已存在，将更新其配置
    */
   registerChannel(e) {
-    this.channels.has(e.name) && this.debug(`Channel "${e.name}" already registered, updating config`), this.channels.set(e.name, new M(e, this.config)), this.debug(`Registered channel "${e.name}" (nativeMethod: ${e.nativeMethod}, injectTo: ${e.injectTo ?? "body"})`);
+    this.channels.has(e.name) && this.debug(`Channel "${e.name}" already registered, updating config`), this.channels.set(e.name, new T(e, this.config)), this.debug(`Registered channel "${e.name}" (nativeMethod: ${e.nativeMethod}, injectTo: ${e.injectTo ?? "body"})`);
   }
   /** 获取通道配置 */
   getChannelConfig(e) {
@@ -172,44 +205,27 @@ class B {
   }
 }
 let l = null;
-function h(n) {
-  return l ? n && Object.assign(l.config, n) : l = new B(n), l;
-}
-function V() {
-  l = null;
-}
-const T = "platform", $ = ["android", "harmony", "web"];
-function A() {
-  if (typeof window > "u" || !window.location)
-    return null;
-  const e = new URLSearchParams(window.location.search).get(T);
-  return e && $.includes(e) ? e : null;
-}
-function D() {
-  if (typeof window > "u")
-    return "unknown";
-  const n = window;
-  return n.WebViewJavascriptBridge ? "android" : n.__harmony_bridge && n.dsBridge ? "harmony" : "web";
-}
-function m() {
-  const n = A();
-  return n || D();
-}
-function k() {
-  const n = m();
-  return n === "android" || n === "harmony";
+function f(n) {
+  return l ? n && Object.assign(l.config, n) : l = new $(n), l;
 }
 function U() {
-  var e;
-  const n = typeof window < "u" ? window : null;
-  return {
-    urlPlatform: A(),
-    windowPlatform: D(),
-    finalPlatform: m(),
-    hasAndroidBridge: !!(n != null && n.WebViewJavascriptBridge),
-    hasHarmonyBridge: !!(n != null && n.__harmony_bridge && (n != null && n.dsBridge)),
-    url: ((e = n == null ? void 0 : n.location) == null ? void 0 : e.href) ?? null
-  };
+  l = null;
+}
+function D() {
+  const n = S();
+  for (const e of A) {
+    const t = e.name, r = e.nativeMethod;
+    n.register(r, (a) => {
+      let i = a;
+      if (typeof a == "string")
+        try {
+          i = JSON.parse(a);
+        } catch {
+          i = a;
+        }
+      return f().pushData(t, i), { success: !0, channel: t };
+    });
+  }
 }
 function j() {
   if (typeof window > "u")
@@ -245,7 +261,7 @@ class I {
     return this.registeredMethods.has(e);
   }
 }
-class N {
+class H {
   constructor(e) {
     this.bridge = e;
   }
@@ -273,17 +289,17 @@ class R {
     const { platform: e, bridgeType: t } = this.detectResult, r = typeof window < "u" ? window : null;
     t === "android-jsbridge" && (r != null && r.WebViewJavascriptBridge) ? P((a) => {
       this.androidAdapter = new I(a), this.onReady();
-    }) : t === "harmony-dsbridge" && (r != null && r.dsBridge) ? (this.harmonyAdapter = new N(r.dsBridge), this.onReady()) : this.ready = !0;
+    }) : t === "harmony-dsbridge" && (r != null && r.dsBridge) ? (this.harmonyAdapter = new H(r.dsBridge), this.onReady()) : this.ready = !0;
   }
   onReady() {
     this.ready = !0, this.jsHandlers.forEach((e, t) => {
       this.registerToNative(t, e, !1);
     }), this.jsAsyncHandlers.forEach((e, t) => {
       this.registerToNative(t, e, !0);
-    }), H(), this.pendingCalls.forEach((e) => e()), this.pendingCalls = [];
+    }), u || (D(), u = !0), this.pendingCalls.forEach((e) => e()), this.pendingCalls = [];
   }
   getPlatform() {
-    return m();
+    return w();
   }
   hasNativeBridge() {
     return this.androidAdapter !== null || this.harmonyAdapter !== null;
@@ -373,48 +389,33 @@ class R {
     }) : this.harmonyAdapter && (r ? this.harmonyAdapter.registerAsyn(e, t) : this.harmonyAdapter.register(e, t));
   }
 }
-let u = null;
+let h = null;
 function S() {
-  return u || (u = new R()), u;
+  return h || (h = new R()), h;
 }
-function O() {
-  u = null, p = !1;
+function q() {
+  h = null, u = !1;
 }
-let p = !1;
-function H() {
-  if (p) return;
-  const n = S();
-  for (const e of b) {
-    const t = e.name, r = e.nativeMethod;
-    n.register(r, (a) => {
-      let i = a;
-      if (typeof a == "string")
-        try {
-          i = JSON.parse(a);
-        } catch {
-          i = a;
-        }
-      return h().pushData(t, i), { success: !0, channel: t };
-    });
-  }
-  p = !0;
+let u = !1;
+function G() {
+  u || (D(), u = !0);
 }
 const d = [];
-function _(n) {
+function C(n) {
   d.push(n);
 }
-function C() {
+function N() {
   return d.pop();
 }
-function F() {
+function W() {
   return d.length > 0 ? [...d[d.length - 1]] : [];
 }
-function E(n, e) {
+function J(n, e) {
   if (!n || !e) return !1;
   const t = e.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "###GLOBSTAR###").replace(/\*/g, "[^/]*").replace(/###GLOBSTAR###/g, ".*");
   return new RegExp(`^${t}(/.*)?$`).test(n);
 }
-function W(n, e, t) {
+function _(n, e, t) {
   if (t == null) return;
   if (typeof e.inject == "function") {
     e.inject(n, t);
@@ -441,18 +442,18 @@ function W(n, e, t) {
     }
   }
 }
-function J(n) {
-  const e = h(), t = n.enableDecoratorContext !== !1;
+function E(n) {
+  const e = f(), t = n.enableDecoratorContext !== !1;
   return async function(a) {
     const i = /* @__PURE__ */ new Set();
     if (t) {
-      const s = F();
+      const s = W();
       for (const o of s)
         i.add(o);
     }
     if (n.routes && a.url) {
       for (const [s, o] of Object.entries(n.routes))
-        if (E(a.url, s))
+        if (J(a.url, s))
           for (const c of o)
             i.add(c);
     }
@@ -461,7 +462,7 @@ function J(n) {
       if (o)
         try {
           const c = await e.waitForData(s, o.timeout);
-          W(a, o, c);
+          _(a, o, c);
         } catch (c) {
           console.warn(
             `[DataSync] Failed to get data for channel "${s}":`,
@@ -472,41 +473,41 @@ function J(n) {
     return a;
   };
 }
-function q(n, e) {
-  const t = J(e);
+function Q(n, e) {
+  const t = E(e);
   return n.interceptors.request.use(t);
 }
-const w = /* @__PURE__ */ new WeakMap();
-function L(n, e, t) {
-  let r = w.get(n);
-  r || (r = /* @__PURE__ */ new Map(), w.set(n, r));
+const p = /* @__PURE__ */ new WeakMap();
+function F(n, e, t) {
+  let r = p.get(n);
+  r || (r = /* @__PURE__ */ new Map(), p.set(n, r));
   const a = r.get(e) || [];
   return a.includes(t) || a.push(t), r.set(e, a), a;
 }
 function v(n, e) {
-  const t = w.get(n);
+  const t = p.get(n);
   return (t == null ? void 0 : t.get(e)) || [];
 }
-function f(n) {
+function g(n) {
   return function(e, t, r) {
-    L(e, t, n);
+    F(e, t, n);
     const a = r.value;
     return r.value = async function(...i) {
-      const s = h(), o = v(e, t);
+      const s = f(), o = v(e, t);
       for (const c of o)
         try {
           await s.waitForData(c);
-        } catch (g) {
+        } catch (y) {
           console.warn(
             `[DataSync] Decorator: channel "${c}" wait failed:`,
-            g == null ? void 0 : g.message
+            y == null ? void 0 : y.message
           );
         }
-      _(o);
+      C(o);
       try {
         return await a.apply(this, i);
       } finally {
-        C();
+        N();
       }
     }, Object.defineProperty(r.value, "name", {
       value: a.name,
@@ -514,39 +515,38 @@ function f(n) {
     }), r;
   };
 }
-const G = f("userInfo"), Q = f("loanInfo"), X = f("vipInfo");
-function Y(n, e) {
+function X(n, e) {
   return v(n, e);
 }
-function z(n) {
-  return h().registerChannel(n), f(n.name);
+function Y(n) {
+  return f().registerChannel(n), g(n.name);
 }
-const K = S();
+const z = g("userInfo"), K = g("loanInfo"), Z = g("vipInfo"), O = S();
 export {
-  B as DataSyncManager,
-  T as PLATFORM_QUERY_KEY,
-  y as STANDARD_CHANNELS,
-  b as STANDARD_CHANNEL_CONFIGS,
-  K as bridge,
-  J as createDataSyncInterceptor,
-  z as createWaitDecorator,
-  A as detectPlatformFromUrl,
-  D as detectPlatformFromWindow,
+  $ as DataSyncManager,
+  M as PLATFORM_QUERY_KEY,
+  k as STANDARD_CHANNELS,
+  A as STANDARD_CHANNEL_CONFIGS,
+  O as bridge,
+  E as createDataSyncInterceptor,
+  Y as createWaitDecorator,
+  m as detectPlatformFromUrl,
+  b as detectPlatformFromWindow,
   S as getBridge,
-  h as getDataSyncManager,
-  Y as getMethodWaitChannels,
-  m as getPlatform,
-  U as getPlatformDebugInfo,
-  m as getPlatformFromUrl,
-  W as injectDataToConfig,
-  k as isNativeEnvironment,
-  E as matchUrlPattern,
-  O as resetBridge,
-  V as resetDataSyncManager,
-  H as setupDataSyncHandlers,
-  q as setupDataSyncInterceptor,
-  f as waitDataSync,
-  Q as waitLoanInfoSync,
-  G as waitUserInfoSync,
-  X as waitVipInfoSync
+  f as getDataSyncManager,
+  X as getMethodWaitChannels,
+  w as getPlatform,
+  V as getPlatformDebugInfo,
+  w as getPlatformFromUrl,
+  _ as injectDataToConfig,
+  L as isNativeEnvironment,
+  J as matchUrlPattern,
+  q as resetBridge,
+  U as resetDataSyncManager,
+  G as setupDataSyncHandlers,
+  Q as setupDataSyncInterceptor,
+  g as waitDataSync,
+  K as waitLoanInfoSync,
+  z as waitUserInfoSync,
+  Z as waitVipInfoSync
 };

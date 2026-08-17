@@ -54,32 +54,5 @@ export interface ChannelState {
   arrivedAt: number | null;
 }
 
-/** 内置标准通道名 */
-export const STANDARD_CHANNELS = {
-  USER_INFO: 'userInfo',
-  LOAN_INFO: 'loanInfo',
-  VIP_INFO: 'vipInfo',
-} as const;
-
-/** 内置标准通道配置 */
-export const STANDARD_CHANNEL_CONFIGS: DataChannelConfig[] = [
-  {
-    name: STANDARD_CHANNELS.USER_INFO,
-    nativeMethod: 'syncUserInfo',
-    injectTo: 'headers',
-    headerMap: { uid: 'X-Uid', ticket: 'X-Ticket' },
-    timeout: 10000,
-  },
-  {
-    name: STANDARD_CHANNELS.LOAN_INFO,
-    nativeMethod: 'syncLoanInfo',
-    injectTo: 'body',
-    timeout: 10000,
-  },
-  {
-    name: STANDARD_CHANNELS.VIP_INFO,
-    nativeMethod: 'syncVipInfo',
-    injectTo: 'body',
-    timeout: 10000,
-  },
-];
+// 注：STANDARD_CHANNELS 和 STANDARD_CHANNEL_CONFIGS 由 proto codegen 自动生成。
+// 参见 generated/config.gen.ts

@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package mp.sdk;
+
+// ============================================
+// MP-SDK 标准数据同步通道
+// ============================================
+//
+// 本文件是三端（Android / HarmonyOS / Web）数据同步的唯一真相源。
+// 各端 SDK 内置的 codegen 工具链会解析此文件，自动生成：
+//   - Android: @Needs* 注解 + DataSyncChannel 常量 + DataSyncMethod 映射 + Helper setter
+//   - Vue: TypeScript 接口 + @wait*Sync 装饰器 + 通道配置 + Handler 注册
+//   - 鸿蒙: DataSyncChannel 常量 + DataSyncMethod 映射 + Helper setter
+//
+// 命名约定：
+//   Message 名（PascalCase）→ 通道名（camelCase）→ JSBridge 方法名（sync + PascalCase）
+//   UserInfo → userInfo → syncUserInfo
+//
+// 扩展方式：
+//   集成方在 specs/proto/custom/ 目录下新增 .proto 文件，
+//   各端 codegen 会自动解析并生成对应的注解/装饰器/常量。
+//
+// 约束：
+//   - 仅使用 message + 标量字段（string/int32/int64/double/bool）+ repeated
+//   - 不使用嵌套 message / enum / oneof（保持 codegen 解析器简单）
+//   - 字段编号从 1 开始连续递增
+
+// 用户信息通道
+// Android: @NeedsUserInfo    Vue: @waitUserInfoSync    Method: syncUserInfo
+message UserInfo {
+  string uid = 1;
+  string ticket = 2;
+  string nickname = 3;
+  string avatar = 4;
+  int32 level = 5;
+}
+
+// 借款信息通道
+// Android: @NeedsLoanInfo    Vue: @waitLoanInfoSync    Method: syncLoanInfo
+message LoanInfo {
+  string orderId = 1;
+  int64 amount = 2;
+  int32 period = 3;
+  double rate = 4;
+  string status = 5;
+}
+
+// 会员信息通道
+// Android: @NeedsVipInfo    Vue: @waitVipInfoSync    Method: syncVipInfo
+message VipInfo {
+  string vipId = 1;
+  int32 vipLevel = 2;
+  string expireDate = 3;
+  repeated string privileges = 4;
+}

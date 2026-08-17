@@ -40,6 +40,16 @@ android {
     }
 }
 
+// 确保 KSP 运行前 proto codegen 已生成 channel-mappings.json
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    dependsOn(project(":and_web_library").tasks.named("protoCodegen"))
+}
+
+ksp {
+    // 传递 channel-mappings.json 路径给 KSP 处理器
+    arg("channel_mappings_path", file("${rootProject.projectDir}/and_web_library/build/generated/proto/kotlin/channel-mappings.json").absolutePath)
+}
+
 dependencies {
     implementation(project(":and_web_library"))
     ksp(project(":data-sync-processor"))

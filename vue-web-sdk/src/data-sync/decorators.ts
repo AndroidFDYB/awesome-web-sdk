@@ -138,63 +138,8 @@ export function waitDataSync(channelName: string): MethodDecorator {
   };
 }
 
-// ========================
-// 内置标准装饰器
-// ========================
-
-/**
- * 等待用户信息（uid + ticket）数据同步
- *
- * 标记的方法在执行前会等待 `userInfo` 通道数据到达，
- * Axios 拦截器会自动将 uid/ticket 注入请求头。
- *
- * @example
- * ```typescript
- * class AuthApi {
- *   @waitUserInfoSync
- *   async getProfile() {
- *     return axios.get('/api/user/profile')
- *   }
- * }
- * ```
- */
-export const waitUserInfoSync: MethodDecorator = waitDataSync('userInfo');
-
-/**
- * 等待借款信息数据同步
- *
- * 标记的方法在执行前会等待 `loanInfo` 通道数据到达，
- * Axios 拦截器会自动将借款信息注入请求体。
- *
- * @example
- * ```typescript
- * class LoanApi {
- *   @waitLoanInfoSync
- *   async getLoanDetail(id: string) {
- *     return axios.get(`/api/loan/${id}`)
- *   }
- * }
- * ```
- */
-export const waitLoanInfoSync: MethodDecorator = waitDataSync('loanInfo');
-
-/**
- * 等待会员信息数据同步
- *
- * 标记的方法在执行前会等待 `vipInfo` 通道数据到达，
- * Axios 拦截器会自动将会员信息注入请求体。
- *
- * @example
- * ```typescript
- * class VipApi {
- *   @waitVipInfoSync
- *   async getVipBenefits() {
- *     return axios.get('/api/vip/benefits')
- *   }
- * }
- * ```
- */
-export const waitVipInfoSync: MethodDecorator = waitDataSync('vipInfo');
+// 注：waitUserInfoSync / waitLoanInfoSync / waitVipInfoSync 等内置装饰器
+// 由 proto codegen 自动生成。参见 generated/decorators.gen.ts
 
 // ========================
 // 装饰器工具函数

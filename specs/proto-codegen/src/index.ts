@@ -1,0 +1,31 @@
+/**
+ * @mp-sdk/proto-codegen
+ *
+ * 共享的轻量级 proto 解析器和命名约定工具。
+ * 供 Vue Vite 插件和鸿蒙 hvigor 插件使用。
+ */
+
+// 数据模型
+export type { ProtoFile, ProtoMessage, ProtoField, ProtoScalarType } from './model';
+
+// 解析器
+export { parseProto, parseProtoFile, parseProtoFiles, collectProtoFiles } from './parser';
+export type { ParseResult } from './parser';
+
+// 命名约定
+export {
+  isScalarType,
+  toCamelCase,
+  toUpperSnakeCase,
+  messageToChannel,
+  messageToSyncMethod,
+  messageToAnnotationClass,
+  messageToAnnotationFqName,
+  messageToDecoratorName,
+  messageToSetterName,
+  messageToConstantName,
+  messageToMethodConstantName,
+  protoTypeToTs,
+  protoTypeToKotlin,
+  protoTypeToArkTS,
+} from './naming';

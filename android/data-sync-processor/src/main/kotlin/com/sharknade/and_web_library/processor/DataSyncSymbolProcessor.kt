@@ -7,25 +7,25 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import java.io.File
 
 /**
- * KSP 数据同步注解处理器
+ * KSP 数据同步注解处理器（通用化版本）
  *
- * 在编译期扫描以下注解：
- * - @NeedsUserInfo     → 通道 "userInfo"
- * - @NeedsLoanInfo     → 通道 "loanInfo"
- * - @NeedsVipInfo      → 通道 "vipInfo"
- * - @NeedsDataSync(channel) → 通道 = channel 参数值
+ * 从 channel-mappings.json 动态读取注解→通道映射，
+ * 不再硬编码 @NeedsUserInfo / @NeedsLoanInfo 等常量。
  *
- * 生成 DataSyncBindings 注册表对象，运行时通过类名直接查表获取所需数据通道，
- * 彻底消除运行时反射开销。
+ * 处理两类注解：
+ * 1. Proto 生成的 @Needs* 注解（通过 channel-mappings.json 发现）
+ * 2. @NeedsDataSync(channel) 通用注解（从参数提取通道名）
+ *
+ * 生成 DataSyncBindings 注册表对象，运行时通过类名直接查表获取所需数据通道。
  *
  * 生成代码示例：
  * ```kotlin
  * object DataSyncBindings {
  *     fun getChannels(className: String): Set<String> = when (className) {
  *         "com.example.LoanActivity" -> setOf("userInfo", "loanInfo")
- *         "com.example.VipActivity" -> setOf("userInfo", "vipInfo")
  *         else -> emptySet()
  *     }
  * }
@@ -34,18 +34,12 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 class DataSyncSymbolProcessor(
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger,
-    @Suppress("unused") private val options: Map<String, String>
+    private val options: Map<String, String>
 ) : SymbolProcessor {
 
     companion object {
-        private const val ANNOT_NEEDS_USER_INFO = "com.sharknade.and_web_library.NeedsUserInfo"
-        private const val ANNOT_NEEDS_LOAN_INFO = "com.sharknade.and_web_library.NeedsLoanInfo"
-        private const val ANNOT_NEEDS_VIP_INFO = "com.sharknade.and_web_library.NeedsVipInfo"
+        private const val OPTION_MAPPINGS_PATH = "channel_mappings_path"
         private const val ANNOT_NEEDS_DATA_SYNC = "com.sharknade.and_web_library.NeedsDataSync"
-
-        private const val CHANNEL_USER_INFO = "userInfo"
-        private const val CHANNEL_LOAN_INFO = "loanInfo"
-        private const val CHANNEL_VIP_INFO = "vipInfo"
 
         private const val GENERATED_PACKAGE = "com.sharknade.and_web_library.generated"
         private const val GENERATED_FILE_NAME = "DataSyncBindings"
@@ -54,21 +48,27 @@ class DataSyncSymbolProcessor(
     /** 防止多次处理 */
     private var processed = false
 
+    /** 从 channel-mappings.json 读取的注解 FQ 名 → 通道名映射 */
+    private var standardMappings: Map<String, String> = emptyMap()
+
     override fun process(resolver: Resolver): List<KSAnnotated> {
         if (processed) return emptyList()
         processed = true
+
+        // 读取 channel-mappings.json
+        loadChannelMappings()
+
+        if (standardMappings.isEmpty()) {
+            logger.warn("DataSyncSymbolProcessor: No channel mappings found. " +
+                "Ensure proto codegen task has run and channel-mappings.json is accessible. " +
+            "Option: $OPTION_MAPPINGS_PATH")
+        }
 
         // className → 通道集合
         val bindings = mutableMapOf<String, MutableSet<String>>()
         val deferred = mutableListOf<KSAnnotated>()
 
-        // 标准注解 → 固定通道
-        val standardMappings = mapOf(
-            ANNOT_NEEDS_USER_INFO to CHANNEL_USER_INFO,
-            ANNOT_NEEDS_LOAN_INFO to CHANNEL_LOAN_INFO,
-            ANNOT_NEEDS_VIP_INFO to CHANNEL_VIP_INFO
-        )
-
+        // 标准注解（来自 proto codegen）→ 固定通道
         for ((annotationFqName, channel) in standardMappings) {
             resolver.getSymbolsWithAnnotation(annotationFqName).forEach { symbol ->
                 if (symbol is KSClassDeclaration) {
@@ -101,10 +101,50 @@ class DataSyncSymbolProcessor(
 
         if (bindings.isNotEmpty()) {
             generateBindingsFile(bindings)
-            logger.info("DataSyncSymbolProcessor: generated ${bindings.size} bindings")
+            logger.info("DataSyncSymbolProcessor: generated ${bindings.size} bindings, " +
+                "mappings: $standardMappings")
         }
 
         return deferred
+    }
+
+    /**
+     * 从 channel-mappings.json 读取注解→通道映射
+     *
+     * JSON 格式：
+     * [
+     *   { "messageName": "UserInfo", "annotationClass": "NeedsUserInfo",
+     *     "annotationFqName": "com.sharknade.and_web_library.NeedsUserInfo",
+     *     "channel": "userInfo", "syncMethod": "syncUserInfo" },
+     *   ...
+     * ]
+     */
+    private fun loadChannelMappings() {
+        val mappingsPath = options[OPTION_MAPPINGS_PATH]
+        if (mappingsPath == null) {
+            logger.warn("DataSyncSymbolProcessor: option '$OPTION_MAPPINGS_PATH' not set")
+            return
+        }
+
+        val file = File(mappingsPath)
+        if (!file.exists()) {
+            logger.warn("DataSyncSymbolProcessor: channel-mappings.json not found at $mappingsPath")
+            return
+        }
+
+        val content = file.readText()
+        // 轻量级正则解析：提取 annotationFqName 和 channel
+        val pattern = Regex(""""annotationFqName":\s*"([^"]+)".*?"channel":\s*"([^"]+)"""")
+        val mappings = mutableMapOf<String, String>()
+
+        for (match in pattern.findAll(content)) {
+            val fqName = match.groupValues[1]
+            val channel = match.groupValues[2]
+            mappings[fqName] = channel
+        }
+
+        standardMappings = mappings
+        logger.info("DataSyncSymbolProcessor: loaded ${mappings.size} channel mappings from $mappingsPath")
     }
 
     /**
@@ -138,7 +178,7 @@ class DataSyncSymbolProcessor(
             appendLine()
             appendLine("/**")
             appendLine(" * KSP 自动生成的数据同步绑定注册表")
-            appendLine(" * 编译期扫描 @NeedsUserInfo / @NeedsLoanInfo / @NeedsVipInfo / @NeedsDataSync 注解")
+            appendLine(" * 编译期扫描 @Needs* 注解和 @NeedsDataSync 注解")
             appendLine(" * 运行时通过类名查询所需数据通道，无需反射")
             appendLine(" */")
             appendLine("object $GENERATED_FILE_NAME {")

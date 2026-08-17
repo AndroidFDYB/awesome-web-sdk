@@ -22,18 +22,12 @@ export declare function getBridge(): IMPBridge;
  */
 export declare function resetBridge(): void;
 /**
- * 自动注册标准数据同步 Handler
+ * 注册数据同步 Handler（委托给 proto codegen 生成的函数）
  *
  * 当 Bridge 就绪后，自动注册以下 JS Handler 供 Native 调用：
- * - syncUserInfo：接收 Native 推送的用户信息（uid + ticket）
+ * - syncUserInfo：接收 Native 推送的用户信息
  * - syncLoanInfo：接收 Native 推送的借款信息
  * - syncVipInfo：接收 Native 推送的会员信息
- *
- * Native 端调用方式：
- *   Android: webView.callBridgeHandler("syncUserInfo", dataJson)
- *   鸿蒙: bridgeManager.callJs("syncUserInfo", [dataJson])
- *
- * 收到数据后，自动调用 DataSyncManager.pushData() 唤醒等待队列。
  *
  * 此函数在 bridge onReady 时自动调用，也可手动调用以重新注册。
  */

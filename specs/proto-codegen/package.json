@@ -1,0 +1,17 @@
+{
+  "name": "@mp-sdk/proto-codegen",
+  "version": "1.0.0",
+  "description": "Shared lightweight proto parser and naming conventions for MP-SDK codegen",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0"
+  },
+  "files": ["dist"]
+}

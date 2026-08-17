@@ -17,10 +17,11 @@ export type {
   ChannelState,
 } from './types';
 
+// 通道配置由 proto codegen 自动生成
 export {
   STANDARD_CHANNELS,
   STANDARD_CHANNEL_CONFIGS,
-} from './types';
+} from './generated/config.gen';
 
 // 管理器导出
 export {
@@ -40,12 +41,16 @@ export {
   getCurrentDecoratorChannels,
 } from './interceptor';
 
-// 装饰器导出
+// 装饰器核心逻辑
 export {
   waitDataSync,
-  waitUserInfoSync,
-  waitLoanInfoSync,
-  waitVipInfoSync,
   createWaitDecorator,
   getMethodWaitChannels,
 } from './decorators';
+
+// 标准装饰器由 proto codegen 自动生成
+export {
+  waitUserInfoSync,
+  waitLoanInfoSync,
+  waitVipInfoSync,
+} from './generated/decorators.gen';

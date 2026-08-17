@@ -58,10 +58,17 @@ export type {
   ChannelState,
 } from './data-sync/types';
 
+// 通道配置和装饰器由 proto codegen 自动生成
 export {
   STANDARD_CHANNELS,
   STANDARD_CHANNEL_CONFIGS,
-} from './data-sync/types';
+} from './data-sync/generated/config.gen';
+
+export type {
+  UserInfo,
+  LoanInfo,
+  VipInfo,
+} from './data-sync/generated/types.gen';
 
 export {
   DataSyncManager,
@@ -78,12 +85,16 @@ export {
 
 export {
   waitDataSync,
-  waitUserInfoSync,
-  waitLoanInfoSync,
-  waitVipInfoSync,
   createWaitDecorator,
   getMethodWaitChannels,
 } from './data-sync/decorators';
+
+// 标准装饰器由 proto codegen 自动生成
+export {
+  waitUserInfoSync,
+  waitLoanInfoSync,
+  waitVipInfoSync,
+} from './data-sync/generated/decorators.gen';
 
 // 便捷导出默认实例
 import { getBridge } from './bridge';

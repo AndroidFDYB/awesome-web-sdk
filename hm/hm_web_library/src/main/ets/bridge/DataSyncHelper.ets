@@ -45,53 +45,8 @@
  */
 
 import { JSBridgeManager } from './JSBridge';
-
-// ========================
-// 通道常量
-// ========================
-
-/**
- * 标准数据通道名称
- * 与前端 SDK vue-web-sdk/src/data-sync/types.ts 中的 STANDARD_CHANNELS 保持一致
- */
-export class DataSyncChannel {
-  /** 用户信息（uid + ticket 认证数据） */
-  static readonly USER_INFO: string = 'userInfo';
-  /** 借款信息数据 */
-  static readonly LOAN_INFO: string = 'loanInfo';
-  /** 会员信息数据 */
-  static readonly VIP_INFO: string = 'vipInfo';
-}
-
-/**
- * Native → JS 推送数据时调用的 JSBridge 方法名
- * 与前端 SDK bridge.ts 中 setupDataSyncHandlers 注册的 Handler 名保持一致
- */
-export class DataSyncMethod {
-  static readonly SYNC_USER_INFO: string = 'syncUserInfo';
-  static readonly SYNC_LOAN_INFO: string = 'syncLoanInfo';
-  static readonly SYNC_VIP_INFO: string = 'syncVipInfo';
-
-  /**
-   * 根据通道名获取对应的 JSBridge 方法名
-   * 标准通道使用预定义方法名，自定义通道自动生成 "syncXxx" 格式
-   */
-  static fromChannel(channel: string): string {
-    switch (channel) {
-      case DataSyncChannel.USER_INFO:
-        return DataSyncMethod.SYNC_USER_INFO;
-      case DataSyncChannel.LOAN_INFO:
-        return DataSyncMethod.SYNC_LOAN_INFO;
-      case DataSyncChannel.VIP_INFO:
-        return DataSyncMethod.SYNC_VIP_INFO;
-      default: {
-        // 自定义通道：首字母大写 + "sync" 前缀
-        const capitalized = channel.charAt(0).toUpperCase() + channel.slice(1);
-        return `sync${capitalized}`;
-      }
-    }
-  }
-}
+import { DataSyncChannel } from '../generated/DataSyncChannels';
+import { DataSyncMethod } from '../generated/DataSyncMethods';
 
 // ========================
 // 同步状态枚举
