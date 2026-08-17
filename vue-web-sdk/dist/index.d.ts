@@ -33,7 +33,7 @@
  * }
  * ```
  */
-export { getBridge, resetBridge, setupDataSyncHandlers } from './bridge';
+export { getBridge, resetBridge, setupDataSyncHandlers, setupEmitterBridge } from './bridge';
 export type { IMPBridge, Platform, SyncHandler, AsyncHandler, IAndroidJsBridge, IHarmonyBridge } from './types';
 export { detectPlatformFromUrl, detectPlatformFromWindow, getPlatform as getPlatformFromUrl, isNativeEnvironment, getPlatformDebugInfo, PLATFORM_QUERY_KEY, } from './platform';
 export type { InjectTo, InjectFunction, DataChannelConfig, DataSyncManagerConfig, InterceptorConfig, ChannelState, } from './data-sync/types';
@@ -45,6 +45,10 @@ export { waitDataSync, createWaitDecorator, getMethodWaitChannels, } from './dat
 export { waitUserInfoSync, waitLoanInfoSync, waitVipInfoSync, } from './data-sync/generated/decorators.gen';
 export { jump2Native, JUMP2NATIVE_METHOD } from './app-link';
 export type { AppLinkCallParams, AppLinkResult } from './app-link';
+export { MPEmitter, getEmitter, resetEmitter, emitter } from './emitter';
+export type { TransportFunction } from './emitter';
+export { EMITTER_CONTAINER, POST_TO_NATIVE_METHOD, POST_TO_WEB_METHOD, isFourLevelEvent, getContainerName, } from './emitter';
+export type { PostToNativeParams, PostToWebParams, EmitterHandler } from './emitter';
 import { getPlatform } from './platform';
 export declare const bridge: import("./types").IMPBridge;
 export { getPlatform };

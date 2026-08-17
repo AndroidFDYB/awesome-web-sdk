@@ -35,7 +35,7 @@
  */
 
 // JSBridge 核心通信
-export { getBridge, resetBridge, setupDataSyncHandlers } from './bridge';
+export { getBridge, resetBridge, setupDataSyncHandlers, setupEmitterBridge } from './bridge';
 export type { IMPBridge, Platform, SyncHandler, AsyncHandler, IAndroidJsBridge, IHarmonyBridge } from './types';
 
 // 平台检测
@@ -99,6 +99,18 @@ export {
 // AppLink 模块
 export { jump2Native, JUMP2NATIVE_METHOD } from './app-link';
 export type { AppLinkCallParams, AppLinkResult } from './app-link';
+
+// Emitter 模块（跨 WebView 事件通信）
+export { MPEmitter, getEmitter, resetEmitter, emitter } from './emitter';
+export type { TransportFunction } from './emitter';
+export {
+  EMITTER_CONTAINER,
+  POST_TO_NATIVE_METHOD,
+  POST_TO_WEB_METHOD,
+  isFourLevelEvent,
+  getContainerName,
+} from './emitter';
+export type { PostToNativeParams, PostToWebParams, EmitterHandler } from './emitter';
 
 // 便捷导出默认实例
 import { getBridge } from './bridge';

@@ -22,6 +22,16 @@ export declare function getBridge(): IMPBridge;
  */
 export declare function resetBridge(): void;
 /**
+ * 设置 Emitter 传输函数 + 注册 postToWeb JS Handler
+ *
+ * 当 Bridge 就绪后自动调用：
+ * 1. 设置 emitter transport：4级事件 emit → bridge.callAsync('postToNative', { event, data })
+ * 2. 注册 postToWeb JS Handler：Native 转发的事件 → emitter.dispatch 触发本地监听器
+ *
+ * 此函数在 bridge onReady 时自动调用，确保跨 WebView 事件通信通道就绪。
+ */
+export declare function setupEmitterBridge(): void;
+/**
  * 注册数据同步 Handler（委托给 proto codegen 生成的函数）
  *
  * 当 Bridge 就绪后，自动注册以下 JS Handler 供 Native 调用：

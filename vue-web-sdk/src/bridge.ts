@@ -18,6 +18,8 @@ import { getPlatform as getPlatformEnhanced } from './platform';
 // setupDataSyncHandlers 由 proto codegen 自动生成
 import { setupDataSyncHandlers as registerDataSyncHandlers } from './data-sync/generated/handlers.gen';
 import type { AppLinkResult } from './app-link/types';
+import { getEmitter, resetEmitter } from './emitter/emitter';
+import { POST_TO_NATIVE_METHOD, POST_TO_WEB_METHOD } from './emitter/types';
 
 // ========================
 // 平台检测
@@ -191,6 +193,11 @@ class MPBridgeImpl implements IMPBridge {
     if (!dataSyncHandlersRegistered) {
       registerDataSyncHandlers();
       dataSyncHandlersRegistered = true;
+    }
+    // 设置 Emitter 传输函数 + 注册 postToWeb Handler（跨 WebView 事件通信）
+    if (!emitterBridgeSetup) {
+      setupEmitterBridge();
+      emitterBridgeSetup = true;
     }
     // 执行待处理的调用
     this.pendingCalls.forEach(fn => fn());
@@ -370,6 +377,47 @@ export function getBridge(): IMPBridge {
 export function resetBridge(): void {
   instance = null;
   dataSyncHandlersRegistered = false;
+  emitterBridgeSetup = false;
+  resetEmitter();
+}
+
+// ========================
+// Emitter Bridge 集成
+// ========================
+
+/** 标记是否已设置 Emitter Bridge */
+let emitterBridgeSetup = false;
+
+/**
+ * 设置 Emitter 传输函数 + 注册 postToWeb JS Handler
+ *
+ * 当 Bridge 就绪后自动调用：
+ * 1. 设置 emitter transport：4级事件 emit → bridge.callAsync('postToNative', { event, data })
+ * 2. 注册 postToWeb JS Handler：Native 转发的事件 → emitter.dispatch 触发本地监听器
+ *
+ * 此函数在 bridge onReady 时自动调用，确保跨 WebView 事件通信通道就绪。
+ */
+export function setupEmitterBridge(): void {
+  const bridge = getBridge();
+  const emitter = getEmitter();
+
+  // 设置传输函数：4级事件 emit → 通过 postToNative 发送给 Native
+  emitter.setTransport((event: string, data?: any) => {
+    bridge.callAsync(POST_TO_NATIVE_METHOD, { event, data });
+  });
+
+  // 注册 postToWeb JS Handler：Native 转发的事件 → dispatch 到本地监听器
+  // 兼容字符串和对象输入（Android 传 JSON 字符串，鸿蒙可能传字符串或对象）
+  bridge.register(POST_TO_WEB_METHOD, (params: any) => {
+    let parsed = params;
+    if (typeof params === 'string') {
+      try { parsed = JSON.parse(params); } catch (e) { parsed = params; }
+    }
+    if (parsed && typeof parsed === 'object' && 'event' in parsed) {
+      emitter.dispatch(parsed.event, parsed.data);
+    }
+    return { success: true };
+  });
 }
 
 // ========================
