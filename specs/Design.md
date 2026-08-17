@@ -110,6 +110,35 @@ MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容�
 - **去重策略**：按 Message 名去重，标准通道优先
 - **约束**：proto 仅使用 `message` + 标量字段 + `repeated`，不支持嵌套 message / enum / oneof（保持解析器简单）
 
+### 2.12 Gradle 9.x 跨项目 JavaExec 配置解析独占锁
+
+- **问题**：`protoCodegen` 任务（JavaExec）在执行阶段直接引用 `:proto-codegen` 的 `sourceSets.getByName("main").runtimeClasspath`，Gradle 9.x 报错：`Resolution of the configuration ':proto-codegen:runtimeClasspath' was attempted without an exclusive lock. This is unsafe and not allowed.`
+- **根因**：Gradle 9.x 禁止在任务执行阶段直接解析其他项目的配置对象（无独占锁保护）
+- **最终方案**：在消费方模块（`:and_web_library`）创建本地 resolvable configuration，通过 `dependencies` 块声明引用 `:proto-codegen`，让 Gradle 正确管理锁和依赖替换
+- **代码变更**：
+  ```kotlin
+  // 修复前（不安全）
+  classpath = codegenProject.sourceSets.getByName("main").runtimeClasspath
+
+  // 修复后（Gradle 9.x 安全）
+  val codegenClasspath: Configuration by configurations.creating {
+      isCanBeConsumed = false
+      isCanBeResolved = true
+  }
+  dependencies { codegenClasspath(project(":proto-codegen")) }
+  // ...
+  classpath = codegenClasspath
+  ```
+- **优势**：配置解析通过标准依赖声明流程，Gradle 自动管理独占锁，兼容增量构建和配置缓存
+
+### 2.13 Kotlin 扩展函数显式导入规范
+
+- **背景**：Proto codegen 生成的 `setUserInfo` / `setLoanInfo` / `setVipInfo` 等 setter 是顶层扩展函数（`fun MPDataSyncHelper.setUserInfo(data: String)`），调用方需手动 `import`
+- **决策**：保持扩展函数模式，不改为成员函数。与 Jetpack Compose 的 `remember` / `mutableStateOf` 等顶层函数使用方式一致
+- **使用方式**：调用方可选择逐个导入或通配导入 `import com.sharknade.and_web_library.*`
+- **替代方案**：如需零导入，可使用 `helper.setData(DataSyncChannel.USER_INFO, data)` 通用方法（`setData` 为成员函数）
+- **设计理由**：扩展函数不修改原始类，codegen 产物与手写源码解耦，符合组合优于继承的设计原则
+
 ---
 
 ## 3. 模块依赖关系
@@ -310,11 +339,12 @@ fun loadBridgeUrl(url: String)
 val channels = DataSyncBindings.getChannels(this.javaClass.name)
 val helper = MPDataSyncHelper.create(webView, channels)
 
-// API（setter 方法由 proto codegen 生成为扩展函数）
-helper.setUserInfo(data: String)   // 设置用户信息（proto 生成）
-helper.setLoanInfo(data: String)   // 设置借款信息（proto 生成）
-helper.setVipInfo(data: String)    // 设置会员信息（proto 生成）
-helper.setData(channel, data)      // 设置指定通道数据
+// API（setter 方法由 proto codegen 生成为扩展函数，调用方需显式导入）
+// import com.sharknade.and_web_library.setUserInfo  // 或通配 import com.sharknade.and_web_library.*
+helper.setUserInfo(data: String)   // 设置用户信息（proto 生成，扩展函数）
+helper.setLoanInfo(data: String)   // 设置借款信息（proto 生成，扩展函数）
+helper.setVipInfo(data: String)    // 设置会员信息（proto 生成，扩展函数）
+helper.setData(channel, data)      // 设置指定通道数据（成员函数，无需额外导入）
 helper.notifyPageLoaded()          // 通知页面加载完成，触发推送
 helper.notifyPageLoading()         // 通知页面开始加载
 helper.isAllDataSynced(): Boolean   // 检查是否全部同步完成
@@ -527,6 +557,7 @@ npm run build:android
 - 版本目录：`gradle/libs.versions.toml`
 - 模块：`:library`（JsBridge 源码）→ `:and_web_library`（SDK 封装）+ `:proto-codegen`（proto 解析器）
 - Proto Codegen 流水线：`ProtoCodegenTask`（JavaExec）调用 `Main.kt` → 生成 5 个 Kotlin 文件 + channel-mappings.json
+- 跨项目 classpath：通过本地 resolvable configuration 引用 `:proto-codegen`（详见 §2.12）
 - `gradle.properties` 关键属性：
   - `android.disallowKotlinSourceSets=false`（KSP 兼容）
   - `android.sourceset.disallowProvider=false`（允许 Provider 进 SourceSet）

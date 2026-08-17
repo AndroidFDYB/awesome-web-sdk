@@ -65,6 +65,18 @@
 - ❌ 不使用 KAPT（性能差，不支持增量编译）
 - ❌ 不使用运行时反射（混淆环境不安全）
 - ❌ `MPBridgeWebView` 不允许继承（final 类）
+- ❌ JavaExec 任务不直接引用其他项目 `sourceSets.runtimeClasspath`（Gradle 9.x 独占锁限制）
+
+**跨项目 JavaExec classpath 规范**：
+```kotlin
+// 必须通过本地 resolvable configuration + dependencies 声明
+val codegenClasspath: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { codegenClasspath(project(":proto-codegen")) }
+// JavaExec task: classpath = codegenClasspath
+```
 
 **关键配置**：
 ```properties
@@ -72,6 +84,12 @@
 android.disallowKotlinSourceSets=false    # KSP 兼容 AGP 9.x
 android.sourceset.disallowProvider=false  # Provider 进 SourceSet
 ```
+
+**Kotlin 扩展函数导入规范**：
+- Proto codegen 生成的 setter（`setUserInfo` / `setLoanInfo` / `setVipInfo`）为顶层扩展函数，调用方需显式导入
+- 与 Jetpack Compose 的 `remember` / `mutableStateOf` 使用方式一致，这是 Kotlin 标准模式
+- 可选方式：逐个导入 `import com.sharknade.and_web_library.setUserInfo` 或通配导入 `import com.sharknade.and_web_library.*`
+- 零导入替代：`helper.setData(DataSyncChannel.USER_INFO, data)`（`setData` 为成员函数）
 
 ### 2.2 鸿蒙端
 

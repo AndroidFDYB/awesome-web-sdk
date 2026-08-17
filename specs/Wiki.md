@@ -125,6 +125,7 @@ AGP 9.0.1 内置 Kotlin 2.2.10 编译器，与 KSP 集成时遇到以下问题�
 | `Using kotlin.sourceSets DSL is not allowed` | AGP 9.x 内置 Kotlin 不允许 KSP 使用 sourceSets DSL | `gradle.properties` 添加 `android.disallowKotlinSourceSets=false` |
 | `plugin already on classpath with unknown version` | Kotlin JVM 插件已在全局 classpath | `id("org.jetbrains.kotlin.jvm")` 不带版本号 |
 | `Inconsistent JVM-target: compileJava(11) vs compileKotlin(21)` | Java 和 Kotlin JVM target 不一致 | 统一使用 `JavaVersion.VERSION_21` |
+| `Resolution of configuration was attempted without an exclusive lock` | Gradle 9.x 禁止执行阶段直接解析其他项目 runtimeClasspath | 在消费方创建 resolvable configuration + `dependencies` 声明引用（详见 Design.md §2.12） |
 
 ### 删除的文件
 
@@ -171,3 +172,5 @@ AGP 9.0.1 内置 Kotlin 2.2.10 编译器，与 KSP 集成时遇到以下问题�
 | 初始 | AGP 9.x 适配 | 2.5 |
 | 2025-08 | Android 组合模式 + KSP 编译期注入 | 2.6 |
 | 2025-08 | 鸿蒙原生 Web 组件 + 工具注入 | 2.7 |
+| 2026-08 | Gradle 9.x 跨项目 JavaExec 配置解析独占锁修复 | 2.12 |
+| 2026-08 | Kotlin 扩展函数显式导入规范 | 2.13 |
