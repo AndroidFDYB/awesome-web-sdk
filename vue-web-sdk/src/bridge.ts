@@ -1,111 +1,259 @@
 /**
  * MPBridge 核心实现
  *
- * 封装 DSBridge（dsbridge npm 包），提供统一的跨平台 JSBridge API。
- * 自动检测运行环境（Android / HarmonyOS / 纯 Web），适配不同的 Native 桥接。
+ * 提供统一的跨平台 JSBridge API，自动检测运行环境并适配不同的 Native 桥接：
  *
- * 在 Android WebView 中：由 DSBridge-Android 的 DWebView 自动注入 window.dsBridge
- * 在鸿蒙 WebView 中：由 MPBridgeWeb 组件注入 bridge.js，提供 window.dsBridge
- * 在纯 Web 中：提供 fallback 实现，方法调用会输出警告
+ * - Android：使用 happydog-intj/JsBridge，通过 BridgeWebView 自动注入 window.WebViewJavascriptBridge
+ *   JS 端使用 setupWebViewJavascriptBridge() 初始化，bridge.callHandler / bridge.registerHandler
+ *
+ * - 鸿蒙：使用 MPBridgeWeb 组件注入 bridge.js，提供 window.dsBridge（自定义协议）
+ *   JS 端使用 dsBridge.call / dsBridge.callAsync / dsBridge.register
+ *
+ * - 纯 Web：提供 fallback 实现，方法调用会输出警告
  */
 
-import type { Platform, IMPBridge, SyncHandler, AsyncHandler, IDSBridge } from './types';
+import type { Platform, IMPBridge, SyncHandler, AsyncHandler, IAndroidJsBridge, IHarmonyBridge } from './types';
 
-/**
- * 检测当前平台
- */
-function detectPlatform(): Platform {
-  if (typeof window === 'undefined') return 'unknown';
-  const w = window as any;
-  if (w._dsbridge || w.dsBridge) {
-    if (w.__harmony_bridge) return 'harmony';
-    return 'android';
-  }
-  return 'web';
+// ========================
+// 平台检测
+// ========================
+
+type BridgeType = 'android-jsbridge' | 'harmony-dsbridge' | 'none';
+
+interface DetectResult {
+  platform: Platform;
+  bridgeType: BridgeType;
 }
 
 /**
- * 获取原生 dsBridge 实例
- * DSBridge-Android 注入的是 window.dsBridge
- * 鸿蒙注入的 bridge.js 也设置了 window.dsBridge
+ * 检测当前平台和桥接类型
+ *
+ * Android (JsBridge): window.WebViewJavascriptBridge 由 BridgeWebView 注入
+ *   需要通过 setupWebViewJavascriptBridge(callback) 等待 bridge ready
+ *
+ * 鸿蒙 (自定义协议): window.dsBridge + window.__harmony_bridge 由 MPBridgeWeb 注入
  */
-function getNativeDsBridge(): IDSBridge | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as any;
-  if (w.dsBridge && typeof w.dsBridge.call === 'function') {
-    return w.dsBridge as IDSBridge;
+function detect(): DetectResult {
+  if (typeof window === 'undefined') {
+    return { platform: 'unknown', bridgeType: 'none' };
   }
-  return null;
+  const w = window as any;
+
+  // Android: JsBridge 注入 window.WebViewJavascriptBridge
+  if (w.WebViewJavascriptBridge) {
+    return { platform: 'android', bridgeType: 'android-jsbridge' };
+  }
+
+  // 鸿蒙: 自定义 bridge.js 注入 window.dsBridge + window.__harmony_bridge
+  if (w.__harmony_bridge && w.dsBridge) {
+    return { platform: 'harmony', bridgeType: 'harmony-dsbridge' };
+  }
+
+  // 纯 Web
+  return { platform: 'web', bridgeType: 'none' };
 }
+
+// ========================
+// Android JsBridge 适配层
+// ========================
+
+/**
+ * 等待 Android JsBridge 就绪
+ * BridgeWebView 会触发 WebViewJavascriptBridgeReady 事件
+ */
+function waitForAndroidBridge(callback: (bridge: IAndroidJsBridge) => void): void {
+  const w = window as any;
+  if (w.WebViewJavascriptBridge) {
+    callback(w.WebViewJavascriptBridge);
+    return;
+  }
+  // 监听 bridge ready 事件
+  const handler = (event: any) => {
+    callback(w.WebViewJavascriptBridge);
+    document.removeEventListener('WebViewJavascriptBridgeReady', handler);
+  };
+  document.addEventListener('WebViewJavascriptBridgeReady', handler, false);
+}
+
+/**
+ * 将 Android JsBridge 适配为统一接口
+ */
+class AndroidBridgeAdapter {
+  private bridge: IAndroidJsBridge;
+  private registeredMethods: Set<string> = new Set();
+
+  constructor(bridge: IAndroidJsBridge) {
+    this.bridge = bridge;
+  }
+
+  /** 调用 Native Handler */
+  callHandler(method: string, data: any, callback: (result: string) => void): void {
+    const dataStr = typeof data === 'string' ? data : JSON.stringify(data ?? {});
+    this.bridge.callHandler(method, dataStr, callback);
+  }
+
+  /** 注册 JS Handler */
+  registerHandler(method: string, handler: (data: string, responseCallback: (result: string) => void) => void): void {
+    this.bridge.registerHandler(method, handler);
+    this.registeredMethods.add(method);
+  }
+
+  hasMethod(method: string): boolean {
+    return this.registeredMethods.has(method);
+  }
+}
+
+// ========================
+// 鸿蒙 DSBridge 适配层
+// ========================
+
+class HarmonyBridgeAdapter {
+  private bridge: IHarmonyBridge;
+
+  constructor(bridge: IHarmonyBridge) {
+    this.bridge = bridge;
+  }
+
+  call(method: string, params?: any): any {
+    return this.bridge.call(method, params);
+  }
+
+  callAsync(method: string, params?: any, callback?: (result: any) => void): void {
+    this.bridge.callAsync(method, params, callback);
+  }
+
+  register(method: string, handler: Function | Record<string, Function>): void {
+    this.bridge.register(method, handler);
+  }
+
+  registerAsyn(method: string, handler: Function | Record<string, Function>): void {
+    this.bridge.registerAsyn(method, handler);
+  }
+
+  hasMethod(method: string): boolean {
+    return this.bridge.hasMethod(method);
+  }
+}
+
+// ========================
+// MPBridge 统一实现
+// ========================
 
 class MPBridgeImpl implements IMPBridge {
-  private nativeBridge: IDSBridge | null = null;
-  private platform: Platform = 'unknown';
+  private detectResult: DetectResult;
+  private androidAdapter: AndroidBridgeAdapter | null = null;
+  private harmonyAdapter: HarmonyBridgeAdapter | null = null;
   private jsHandlers: Map<string, SyncHandler> = new Map();
   private jsAsyncHandlers: Map<string, AsyncHandler> = new Map();
+  private ready: boolean = false;
+  private pendingCalls: Array<() => void> = [];
 
   constructor() {
-    this.platform = detectPlatform();
-    this.nativeBridge = getNativeDsBridge();
+    this.detectResult = detect();
+    this.initBridge();
+  }
+
+  private initBridge(): void {
+    const { platform, bridgeType } = this.detectResult;
+    const w = typeof window !== 'undefined' ? window as any : null;
+
+    if (bridgeType === 'android-jsbridge' && w?.WebViewJavascriptBridge) {
+      // Android: 等待 bridge ready 后初始化
+      waitForAndroidBridge((bridge) => {
+        this.androidAdapter = new AndroidBridgeAdapter(bridge);
+        this.onReady();
+      });
+    } else if (bridgeType === 'harmony-dsbridge' && w?.dsBridge) {
+      // 鸿蒙: bridge 已就绪
+      this.harmonyAdapter = new HarmonyBridgeAdapter(w.dsBridge as IHarmonyBridge);
+      this.onReady();
+    } else {
+      // 纯 Web 或 bridge 尚未注入
+      this.ready = true;
+    }
+  }
+
+  private onReady(): void {
+    this.ready = true;
+    // 注册缓存的 JS handlers
+    this.jsHandlers.forEach((handler, method) => {
+      this.registerToNative(method, handler, false);
+    });
+    this.jsAsyncHandlers.forEach((handler, method) => {
+      this.registerToNative(method, handler, true);
+    });
+    // 执行待处理的调用
+    this.pendingCalls.forEach(fn => fn());
+    this.pendingCalls = [];
   }
 
   getPlatform(): Platform {
-    return this.platform;
+    return this.detectResult.platform;
   }
 
   hasNativeBridge(): boolean {
-    return this.nativeBridge !== null;
+    return this.androidAdapter !== null || this.harmonyAdapter !== null;
   }
 
   /**
    * 同步调用 Native 方法
+   * 注意：Android JsBridge 只支持异步回调，同步调用仅鸿蒙端支持
    */
   call(method: string, params?: any): any {
-    if (!this.nativeBridge) {
-      console.warn(`[MPBridge] No native bridge available. Cannot call "${method}". Platform: ${this.platform}`);
+    if (!this.ready) {
+      console.warn(`[MPBridge] Bridge not ready. Queuing call to "${method}".`);
       return null;
     }
-    try {
-      return this.nativeBridge.call(method, params);
-    } catch (e) {
-      console.error(`[MPBridge] call "${method}" failed:`, e);
+    if (this.harmonyAdapter) {
+      return this.harmonyAdapter.call(method, params);
+    }
+    if (this.androidAdapter) {
+      // Android JsBridge 不支持同步返回，使用异步
+      console.warn(`[MPBridge] Android JsBridge does not support synchronous calls. Use callAsync instead.`);
       return null;
     }
+    console.warn(`[MPBridge] No native bridge. Cannot call "${method}". Platform: ${this.detectResult.platform}`);
+    return null;
   }
 
   /**
-   * 异步调用 Native 方法（Promise 或回调形式）
+   * 异步调用 Native 方法（返回 Promise）
    */
   callAsync(method: string, params?: any): Promise<any> {
     return new Promise((resolve) => {
-      if (!this.nativeBridge) {
-        console.warn(`[MPBridge] No native bridge available. Cannot callAsync "${method}". Platform: ${this.platform}`);
+      const doCall = () => {
+        if (this.androidAdapter) {
+          this.androidAdapter.callHandler(method, params, (result: string) => {
+            try { resolve(JSON.parse(result)); }
+            catch (e) { resolve(result); }
+          });
+          return;
+        }
+        if (this.harmonyAdapter) {
+          this.harmonyAdapter.callAsync(method, params, (result: any) => {
+            resolve(result);
+          });
+          return;
+        }
+        console.warn(`[MPBridge] No native bridge. Cannot callAsync "${method}".`);
         resolve(null);
-        return;
-      }
-      try {
-        this.nativeBridge.call(method, params ?? {}, (result: any) => {
-          resolve(result);
-        });
-      } catch (e) {
-        console.error(`[MPBridge] callAsync "${method}" failed:`, e);
-        resolve(null);
+      };
+
+      if (this.ready) {
+        doCall();
+      } else {
+        this.pendingCalls.push(doCall);
       }
     });
   }
 
   /**
    * 注册同步方法供 Native 调用
-   * 支持两种调用方式：
-   * - register(method, handler) - 注册单个方法
-   * - register(namespace, apiObject) - 注册命名空间
    */
   register(methodOrNamespace: string, handlerOrObject: SyncHandler | Record<string, Function>): void {
     if (typeof handlerOrObject === 'function') {
-      // 单个方法注册
       this.jsHandlers.set(methodOrNamespace, handlerOrObject as SyncHandler);
     } else {
-      // 命名空间注册
       const obj = handlerOrObject as Record<string, Function>;
       for (const key of Object.keys(obj)) {
         if (typeof obj[key] === 'function') {
@@ -113,14 +261,8 @@ class MPBridgeImpl implements IMPBridge {
         }
       }
     }
-
-    // 同步到原生桥
-    if (this.nativeBridge) {
-      try {
-        this.nativeBridge.register(methodOrNamespace, handlerOrObject as any);
-      } catch (e) {
-        // 某些环境不支持 register，忽略
-      }
+    if (this.ready) {
+      this.registerToNative(methodOrNamespace, handlerOrObject, false);
     }
   }
 
@@ -138,32 +280,50 @@ class MPBridgeImpl implements IMPBridge {
         }
       }
     }
-
-    if (this.nativeBridge) {
-      try {
-        this.nativeBridge.registerAsyn(methodOrNamespace, handlerOrObject as any);
-      } catch (e) {
-        // 忽略
-      }
+    if (this.ready) {
+      this.registerToNative(methodOrNamespace, handlerOrObject, true);
     }
   }
 
   hasMethod(method: string): boolean {
-    if (this.jsHandlers.has(method) || this.jsAsyncHandlers.has(method)) {
-      return true;
-    }
-    if (this.nativeBridge) {
-      try {
-        return this.nativeBridge.hasMethod(method);
-      } catch (e) {
-        return false;
+    if (this.jsHandlers.has(method) || this.jsAsyncHandlers.has(method)) return true;
+    if (this.androidAdapter) return this.androidAdapter.hasMethod(method);
+    if (this.harmonyAdapter) return this.harmonyAdapter.hasMethod(method);
+    return false;
+  }
+
+  /**
+   * 将 handler 注册到原生桥
+   */
+  private registerToNative(method: string, handlerOrObject: any, isAsync: boolean): void {
+    if (this.androidAdapter && typeof handlerOrObject === 'function') {
+      // Android: 统一包装为 (data, responseCallback) 签名
+      this.androidAdapter.registerHandler(method, (data: string, responseCallback: (result: string) => void) => {
+        let parsedData: any;
+        try { parsedData = JSON.parse(data); } catch (e) { parsedData = data; }
+        if (isAsync) {
+          handlerOrObject(parsedData, (result: any) => {
+            responseCallback(typeof result === 'string' ? result : JSON.stringify(result));
+          });
+        } else {
+          const result = handlerOrObject(parsedData);
+          responseCallback(typeof result === 'string' ? result : JSON.stringify(result));
+        }
+      });
+    } else if (this.harmonyAdapter) {
+      if (isAsync) {
+        this.harmonyAdapter.registerAsyn(method, handlerOrObject);
+      } else {
+        this.harmonyAdapter.register(method, handlerOrObject);
       }
     }
-    return false;
   }
 }
 
-/** 单例实例 */
+// ========================
+// 单例管理
+// ========================
+
 let instance: IMPBridge | null = null;
 
 /**

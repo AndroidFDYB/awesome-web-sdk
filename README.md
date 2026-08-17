@@ -1,6 +1,6 @@
 # 工程目录介绍
 `android` 是一个 Android工程
-`android/android_web_library` 是一个 Android支持WebView的模块（基于 DSBridge 封装 JSBridge）
+`android/android_web_library` 是一个 Android支持WebView的模块（基于 happydog-intj/JsBridge 封装 JSBridge）
 
 同理： 
 

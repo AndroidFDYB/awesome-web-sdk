@@ -19,9 +19,5 @@ export default defineConfig({
       formats: ['es', 'cjs'],
       fileName: (format) => format === 'es' ? 'mp-bridge.js' : 'mp-bridge.cjs',
     },
-    rollupOptions: {
-      // dsbridge 作为外部依赖，不打包进去
-      external: ['dsbridge'],
-    },
   },
 })

@@ -1,10 +1,10 @@
 plugins {
     alias(libs.plugins.android.library)
-//    alias(libs.plugins.kotlin.android)
 }
 
 android {
-    namespace = "com.sharknade.and_web_library"
+    namespace = "com.github.lzyzsd.library"
+
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -27,21 +27,19 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-//    kotlinOptions {
-//        jvmTarget = "11"
-//    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
 }
 
 dependencies {
-    implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-    implementation(project(":library"))
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
+    implementation(libs.gson)
 }

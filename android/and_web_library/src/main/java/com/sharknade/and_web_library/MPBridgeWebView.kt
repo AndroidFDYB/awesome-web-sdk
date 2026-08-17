@@ -3,13 +3,14 @@ package com.sharknade.and_web_library
 import android.content.Context
 import android.util.AttributeSet
 import android.util.Log
-import wendu.dsbridge.DWebView
-import wendu.dsbridge.OnReturnValue
+import com.github.lzyzsd.jsbridge.BridgeWebView
+import com.github.lzyzsd.jsbridge.BridgeHandler
+import com.github.lzyzsd.jsbridge.OnBridgeCallback
 
 /**
  * MPBridgeWebView
  *
- * 基于 DSBridge（wendux/DSBridge-Android）的 DWebView 封装。
+ * 基于 happydog-intj/JsBridge 的 BridgeWebView 封装。
  * 提供统一的 JSBridge 通信能力，支持：
  * - JS 调用 Native（同步 / 异步）
  * - Native 调用 JS
@@ -18,97 +19,101 @@ import wendu.dsbridge.OnReturnValue
  * 使用方式：
  * ```kotlin
  * val webView = MPBridgeWebView(context)
- * webView.addJavascriptObject(MyJsApi(), null)  // 注册 API
- * webView.loadUrl("https://your-page.com")
+ *
+ * // 注册 Native Handler 供 JS 调用
+ * webView.registerBridgeHandler("getUserInfo") { data, callback ->
+ *     val result = """{"name":"test","age":25}"""
+ *     callback.onCallBack(result)
+ * }
+ *
+ * // 调用 JS Handler
+ * webView.callBridgeHandler("onPageReady", """{"page":"home"}""") { result ->
+ *     Log.d("MPBridge", "JS returned: $result")
+ * }
+ *
+ * webView.loadBridgeUrl("https://your-page.com")
  * ```
  */
 class MPBridgeWebView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
-) : DWebView(context, attrs) {
+) : BridgeWebView(context, attrs) {
 
     init {
-        // 根据配置开启调试模式
         if (MPBridgeConfig.debug) {
-            setDebug(true)
             Log.d(MPBridgeConfig.LOG_TAG, "MPBridgeWebView initialized in debug mode")
         }
     }
 
     /**
-     * 注册 Native API 对象
+     * 注册 Native Handler 供 JS 调用
      *
-     * @param apiObject 包含 @JavascriptInterface 注解方法的对象
-     * @param namespace 命名空间，null 表示全局命名空间
+     * @param methodName 方法名（JS 端通过 bridge.callHandler(methodName, ...) 调用）
+     * @param handler 处理函数：(data: String, callback: CallBackFunction) -> Unit
+     *   - data: JS 传来的 JSON 字符串参数
+     *   - callback: 调用 callback.onCallBack(result) 返回结果给 JS
      *
      * 示例：
      * ```kotlin
-     * class MyApi {
-     *     @JavascriptInterface
-     *     fun getUserInfo(msg: Any): String {
-     *         return """{"name":"test","age":25}"""
-     *     }
-     *
-     *     @JavascriptInterface
-     *     fun pay(msg: Any, handler: CompletionHandler<String>) {
-     *         // 异步处理
-     *         handler.complete("""{"status":"success"}""")
-     *     }
+     * webView.registerBridgeHandler("pay") { data, callback ->
+     *     val params = JSONObject(data)
+     *     // 执行支付逻辑...
+     *     callback.onCallBack("""{"status":"success"}""")
      * }
-     *
-     * webView.addJavascriptObject(MyApi(), "business")
-     * // JS 调用: dsBridge.call("business.getUserInfo", params)
+     * // JS 调用: bridge.callHandler("pay", {amount: 100}, function(res) { ... })
      * ```
      */
-    override fun addJavascriptObject(apiObject: Any?, namespace: String?): DWebView {
+    fun registerBridgeHandler(methodName: String, handler: (String, OnBridgeCallback) -> Unit) {
         if (MPBridgeConfig.debug) {
-            Log.d(MPBridgeConfig.LOG_TAG, "addJavascriptObject: namespace=$namespace, class=${apiObject?.javaClass?.simpleName}")
+            Log.d(MPBridgeConfig.LOG_TAG, "registerBridgeHandler: method=$methodName")
         }
-        return super.addJavascriptObject(apiObject, namespace)
+        registerHandler(methodName ,BridgeHandler { data, function ->
+            if (MPBridgeConfig.debug) {
+                Log.d(MPBridgeConfig.LOG_TAG, "Handler called: method=$methodName, data=$data")
+            }
+            handler(data, function)
+
+        })
     }
 
     /**
-     * 调用 JS 方法（带返回值回调）
+     * 调用 JS Handler（带回调）
      *
-     * @param methodName JS 方法名
-     * @param args 参数数组
-     * @param callback 返回值回调
+     * @param methodName JS 端注册的方法名
+     * @param data 传递给 JS 的参数（JSON 字符串）
+     * @param callback JS 返回结果的回调
      *
      * 示例：
      * ```kotlin
-     * webView.callJsHandler("onDataUpdate", arrayOf("key", "value")) { result ->
+     * webView.callBridgeHandler("onDataUpdate", """{"key":"value"}""") { result ->
      *     Log.d("MPBridge", "JS returned: $result")
      * }
      * ```
      */
-    fun <T> callJsHandler(methodName: String, args: Array<Any>?, callback: OnReturnValue<T>?) {
+    fun callBridgeHandler(methodName: String, data: String?, callback: OnBridgeCallback?) {
         if (MPBridgeConfig.debug) {
-            Log.d(MPBridgeConfig.LOG_TAG, "callJsHandler: method=$methodName, args=${args?.contentToString()}")
+            Log.d(MPBridgeConfig.LOG_TAG, "callBridgeHandler: method=$methodName, data=$data")
         }
-        if (args != null) {
-            callHandler(methodName, args, callback)
-        } else {
-            callHandler(methodName, arrayOf(), callback)
-        }
+        callHandler(methodName, data ?: "", callback)
     }
 
     /**
-     * 调用 JS 方法（简化版，无参数）
+     * 调用 JS Handler（简化版，无参数）
      */
-    fun <T> callJsHandler(methodName: String, callback: OnReturnValue<T>?) {
-        callJsHandler(methodName, null, callback)
+    fun callBridgeHandler(methodName: String, callback: OnBridgeCallback?) {
+        callBridgeHandler(methodName, null, callback)
     }
 
     /**
-     * 调用 JS 方法（无回调）
+     * 调用 JS Handler（无回调）
      */
-    fun callJsHandler(methodName: String, args: Array<Any>?) {
-        callJsHandler<Any>(methodName, args, null)
+    fun callBridgeHandler(methodName: String, data: String?) {
+        callBridgeHandler(methodName, data, null)
     }
 
     /**
      * 加载 URL 并注入桥接
-     * DWebView 会自动处理 DSBridge 的注入，无需额外操作
+     * BridgeWebView 会自动注入 WebViewJavascriptBridge，无需额外操作
      */
     fun loadBridgeUrl(url: String) {
         if (MPBridgeConfig.debug) {

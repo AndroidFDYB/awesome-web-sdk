@@ -2,11 +2,19 @@
  * MPBridge 跨平台 JSBridge 协议定义
  *
  * 本文件定义了三端（Android / HarmonyOS / Web）共享的 JSBridge 通信协议。
- * Android 端基于 DSBridge（wendux/DSBridge-Android）封装。
- * HarmonyOS 端基于官方 Web 组件的 javaScriptProxy 实现兼容协议。
- * Web 端（vue-web-sdk）封装 dsbridge npm 包，提供统一 API。
  *
- * JS 端全局对象：window.dsBridge（由 DSBridge 注入 / 鸿蒙端手动注入）
+ * Android 端基于 happydog-intj/JsBridge 封装，通过 BridgeWebView 自动注入 window.WebViewJavascriptBridge
+ *   JS 端调用: bridge.callHandler(method, data, callback) / bridge.registerHandler(method, handler)
+ *
+ * HarmonyOS 端基于官方 Web 组件的 javaScriptProxy 实现自定义协议
+ *   JS 端调用: dsBridge.call(method, params) / dsBridge.callAsync(method, params, callback)
+ *
+ * Web 端（vue-web-sdk）自动检测运行环境，提供统一 API
+ *
+ * 平台检测：
+ * - Android: window.WebViewJavascriptBridge 存在
+ * - 鸿蒙: window.__harmony_bridge + window.dsBridge 存在
+ * - 纯 Web: 以上均不存在
  */
 
 // ========================
@@ -124,17 +132,15 @@ export type Platform = 'android' | 'harmony' | 'web' | 'unknown';
 
 /**
  * 平台检测
- * DSBridge 在 Android 端通过 @JavascriptInterface 注入 window._dsbridge
- * 鸿蒙端通过 javaScriptProxy 注入 window._dsbridge（保持兼容）
+ * Android: BridgeWebView 自动注入 window.WebViewJavascriptBridge
+ * 鸿蒙: MPBridgeWeb 注入 window.dsBridge + window.__harmony_bridge
  */
 export function detectPlatform(): Platform {
   if (typeof window === 'undefined') return 'unknown';
   const w = window as any;
-  if (w._dsbridge) {
-    // DSBridge 存在，需要进一步区分 Android / HarmonyOS
-    // HarmonyOS 环境会额外注入 window.__harmony_bridge = true
-    if (w.__harmony_bridge) return 'harmony';
-    return 'android';
-  }
+  // Android: JsBridge 注入 WebViewJavascriptBridge
+  if (w.WebViewJavascriptBridge) return 'android';
+  // 鸿蒙: 自定义协议
+  if (w.__harmony_bridge && w.dsBridge) return 'harmony';
   return 'web';
 }

@@ -34,16 +34,15 @@ Android SDK目录是  E:\AndroidDevTool\ASSDK
 
 | 平台 | 技术方案 | 产出物 |
 |------|----------|--------|
-| Android | DSBridge (wendux/DSBridge-Android) 开源库 + MPBridgeWebView 封装 | AAR |
+| Android | JsBridge (happydog-intj/JsBridge) 开源库 + MPBridgeWebView 封装 | AAR |
 | 鸿蒙 | 官方 Web 组件 javaScriptProxy + 自定义 JSBridgeManager | HAR |
 | 前端 | Vite 库模式 + dsbridge npm 包封装 | TGZ (npm install) |
 
 ## JSBridge 协议
-- 采用 DSBridge 协议作为统一协议，三端保持兼容
-- JS 端统一入口：`window.dsBridge`
-- Android：DSBridge 的 DWebView 自动注入
+- 采用 WebViewJavascriptBridge 协议作为统一协议，三端保持兼容
+- Android：使用 happydog-intj/JsBridge 库，自动注入 window.WebViewJavascriptBridge
 - 鸿蒙：通过 javaScriptProxy 注入 `_dsbridge` 对象 + bridge.js 提供 `dsBridge` API
-- 前端：封装 dsbridge npm 包，自动检测运行环境
+- 前端：自动检测运行环境（Android/鸿蒙/纯Web），无需额外依赖包
 
 ## 构建方式
 根目录 `package.json` 提供 npm scripts（跨平台）：

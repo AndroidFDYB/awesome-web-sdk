@@ -1,3 +1,5 @@
+import org.gradle.kotlin.dsl.maven
+
 pluginManagement {
     repositories {
         google {
@@ -25,4 +27,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "My Application"
 include(":app")
+include(":library")
 include(":and_web_library")

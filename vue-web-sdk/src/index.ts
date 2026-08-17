@@ -25,7 +25,7 @@
  */
 
 export { getBridge, resetBridge } from './bridge';
-export type { IMPBridge, Platform, SyncHandler, AsyncHandler, IDSBridge } from './types';
+export type { IMPBridge, Platform, SyncHandler, AsyncHandler, IAndroidJsBridge, IHarmonyBridge } from './types';
 
 // 便捷导出默认实例
 import { getBridge } from './bridge';
