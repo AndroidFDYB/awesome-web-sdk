@@ -596,7 +596,37 @@ npm run build:web
 - 零运行时依赖（`@mp-sdk/proto-codegen` 仅开发时依赖）
 - Vite 插件 `mpProtoPlugin`：`buildStart` 解析 proto 生成代码，`configureServer` watch proto 变化自动刷新 + HMR
 
-### 8.5 产物输出
+### 8.5 集成测试验证标准
+
+> **核心原则**：代码修改未通过构建验证不算完成。每次代码变更后必须执行对应的构建命令，确认 `BUILD SUCCESSFUL` 后才能标记任务完成。
+
+#### 开发完成验证清单
+
+| 变更范围 | 验证命令 | 通过标准 |
+|---------|---------|----------|
+| Android SDK | `cd android; .\gradlew.bat :and_web_library:assembleDebug` | BUILD SUCCESSFUL + protoCodegen 生成 5 个文件 |
+| 鸿蒙 SDK | `npm run build:harmony` | BUILD SUCCESSFUL + HAR 产物输出到 output/harmony/ |
+| 前端 SDK | `npm run build:web` | vite build 无错误 + TGZ 产物输出 |
+| 全部三端 | `npm run build:all` | 三端均 BUILD SUCCESSFUL + output/ 产物完整 |
+| Proto 变更 | `npm run build:proto` 后执行三端构建 | 解析器重建 + 三端 codegen 产物正确 |
+
+#### 验证流程规范
+
+```
+1. SubAgent 完成代码修改
+2. 立即执行对应构建命令（不允许跳过）
+3. 解析输出：
+   - BUILD SUCCESSFUL → 任务可标记完成
+   - BUILD FAILED → 分析错误，修复后重新执行
+4. 检查产物：
+   - 生成文件存在且内容正确
+   - 产物输出到 output/ 目录
+5. PM Agent 确认验证通过后才可进入下一任务
+```
+
+> **禁止行为**：代码修改后未执行构建验证就标记任务完成。
+
+### 8.6 产物输出
 
 ```
 output/
