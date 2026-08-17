@@ -6,8 +6,9 @@
  *
  * 协议兼容 DSBridge（wendux），使前端可以使用 dsbridge npm 包。
  */
-import { BridgeRequest, BridgeResponse } from './BridgeModels';
+import { BridgeRequest, BridgeResponse, NativeCallRequest } from './BridgeModels';
 import { HandlerEntry, SyncBridgeHandler, AsyncBridgeHandler } from './BridgeHandler';
+import { webview } from '@kit.ArkWeb';
 
 export class JSBridgeManager {
   /** 注册的 Handler 表：method -> HandlerEntry */

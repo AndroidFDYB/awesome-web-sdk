@@ -25,4 +25,4 @@
  */
 export { getBridge, resetBridge } from './bridge';
 export type { IMPBridge, Platform, SyncHandler, AsyncHandler, IDSBridge } from './types';
-export declare const bridge: import('./types').IMPBridge;
+export declare const bridge: import("./types").IMPBridge;

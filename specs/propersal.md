@@ -10,7 +10,8 @@
 # 环境描述
 本机是Windows平台
 Android SDK目录是  E:\AndroidDevTool\ASSDK
-鸿蒙 SDK目录是 : D:\software\DevEco Studio\sdk\default
+鸿蒙 SDK目录是 : D:\software\DevEco Studio\sdk
+鸿蒙工具目录是 : D:\software\DevEco Studio\tools
 
 # 要求
 1. 每一次中型改动 都要维护到git
