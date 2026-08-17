@@ -66,26 +66,87 @@ MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容�
 - **导出**：`DsBridgeProxy`、`BridgeUtils` 从 `Index.ets` 导出，`MPBridgeWeb` 保留为可选便捷组件
 - **优势**：侵入性极低，页面完全掌控 `Web` 组件配置，工具方法可按需调用
 
+### 2.8 Proto 驱动的三端 Codegen 架构
+
+- **问题**：数据同步通道（注解/装饰器/常量）在三端各自硬编码，新增通道需手动修改 5+ 个文件，易遗漏且命名不一致
+- **最终方案**：以 Protocol Buffers `.proto` 文件作为唯一真相源，各端 SDK 内置 codegen 工具链自动解析并生成对应的注解/装饰器/常量/setter
+- **Codegen 位置**：下沉到各端 SDK 内部，集成方只需引入 proto 文件即可生成
+- **两阶段流水线（Android）**：
+  - Stage 1：Gradle `ProtoCodegenTask`（JavaExec）解析 proto → 生成 SDK 源码（注解、通道常量、方法映射、setter、channel-mappings.json）
+  - Stage 2：KSP 处理器读取 channel-mappings.json → 扫描 `@Needs*` 注解 → 生成 `DataSyncBindings` 注册表
+- **Vue 端**：Vite 插件 `mpProtoPlugin` 在 `buildStart` 钩子解析 proto → 生成 `.gen.ts` 文件；开发模式 `configureServer` 钩子 watch proto 变化自动刷新
+- **鸿蒙端**：Node.js 脚本 `proto-codegen-harmony.js` 在 hvigor 构建前执行，生成 ArkTS 源码
+- **优势**：单一真相源、命名一致性、横向扩展只需在 proto 中加一个 message
+
+### 2.9 纯命名约定推导（零额外配置）
+
+- **方案**：通道元数据全部由 proto Message 名通过命名约定推导，proto 中不写任何平台特定配置
+- **命名规则**：
+  | 元素 | 规则 | 示例 |
+  |------|------|------|
+  | Proto Message | PascalCase | `UserInfo` |
+  | 通道名 (Channel) | camelCase（首字母小写） | `userInfo` |
+  | JSBridge 方法名 | `sync` + PascalCase | `syncUserInfo` |
+  | Android 注解 | `@Needs` + PascalCase | `@NeedsUserInfo` |
+  | Vue 装饰器 | `@wait` + PascalCase + `Sync` | `@waitUserInfoSync` |
+  | Android Setter | `set` + PascalCase | `setUserInfo` |
+  | 鸿蒙通道常量 | UPPER_SNAKE_CASE | `USER_INFO` |
+  | TypeScript 接口 | PascalCase（直接使用） | `UserInfo` |
+- **优势**：零额外配置、约定优于配置、改 proto Message 名即改变所有下游标识符
+
+### 2.10 Proto 仅作 Schema，JSON 字符串传输
+
+- **决策**：Proto 仅作为 Schema 定义工具，运行时传输格式为 JSON 字符串
+- **理由**：
+  - JSBridge 原生支持字符串传输，无需引入 protobuf 运行时库
+  - 前端无需 `protobuf.js` 依赖，保持零运行时依赖
+  - JSON 字符串在各端原生可读，调试方便
+- **实现**：Native 端将业务数据 `JSON.stringify()` 后通过 JSBridge 传输，前端 `JSON.parse()` 后使用
+
+### 2.11 SDK 预置标准通道 + 集成方可扩展
+
+- **标准通道**：`specs/proto/channels.proto` 预置 SDK 标准通道（UserInfo、LoanInfo、VipInfo），由 SDK 维护
+- **扩展机制**：集成方在 `specs/proto/custom/` 目录下新增 `.proto` 文件，各端 codegen 自动解析并合并
+- **去重策略**：按 Message 名去重，标准通道优先
+- **约束**：proto 仅使用 `message` + 标量字段 + `repeated`，不支持嵌套 message / enum / oneof（保持解析器简单）
+
 ---
 
 ## 3. 模块依赖关系
 
-```
+``
+specs/
+├── proto/
+│   ├── channels.proto          # SDK 预置标准通道（唯一真相源）
+│   └── custom/                 # 集成方扩展目录（可选）
+├── proto-codegen/              # 共享 TS 解析器（npm 包，供 Vue + 鸿蒙使用）
+│   ├── src/
+│   │   ├── parser.ts           # 轻量级 .proto 解析器
+│   │   ├── naming.ts            # 命名约定推导工具
+│   │   ├── model.ts            # 解析后的 Proto 数据模型
+│   │   └── index.ts             # 导出入口
+│   └── package.json             # @mp-sdk/proto-codegen
+│
 android/
 ├── settings.gradle.kts
 │   ├── :app                    # 示例应用（不参与 SDK 产出）
 │   ├── :library                # JsBridge 源码模块（Java，产出 classes.jar）
 │   ├── :and_web_library        # Android SDK 模块（Kotlin，产出 AAR）
-│   └── :data-sync-processor    # KSP 处理器模块（纯 Kotlin/JVM，编译期生成 DataSyncBindings）
+│   ├── :data-sync-processor    # KSP 处理器模块（纯 Kotlin/JVM，编译期生成 DataSyncBindings）
+│   └── :proto-codegen          # Kotlin proto 解析器 + 代码生成器（纯 Kotlin/JVM）
 │
 ├── :and_web_library 依赖
 │   ├── project(":library")     # 本地 JsBridge 源码（api 暴露给消费者）
+│   ├── project(":proto-codegen") # Proto 解析器（JavaExec classpath）
 │   ├── androidx.appcompat      # AppCompat 支持
 │   ├── androidx.core.ktx
 │   └── material
 │
 ├── :data-sync-processor 依赖
 │   └── com.google.devtools.ksp:symbol-processing-api  # KSP API（仅编译期）
+│
+├── :proto-codegen 依赖
+│   └── (无额外依赖，纯 Kotlin/JVM)
 │
 └── :library 依赖
     ├── androidx.appcompat
@@ -99,11 +160,15 @@ hm/
     │   ├── JSBridge.ets          # 核心管理器
     │   ├── BridgeHandler.ets     # Handler 接口
     │   ├── BridgeModels.ets      # 数据模型
-    │   ├── DataSyncHelper.ets    # 数据同步辅助器
+    │   ├── DataSyncHelper.ets    # 数据同步辅助器（引用 generated/ 产物）
     │   ├── DsBridgeProxy.ets     # javaScriptProxy 注入对象（独立导出）
     │   └── BridgeUtils.ets      # 桥接工具类（静态方法注入）
     ├── src/main/ets/components/
     │   └── MPBridgeWeb.ets       # Web 组件封装（可选便捷组件）
+    ├── src/main/ets/generated/   # Proto codegen 生成产物
+    │   ├── DataSyncChannels.ets  # 通道常量
+    │   ├── DataSyncMethods.ets   # 方法名推导
+    │   └── DataSyncSetters.ets   # setter 方法
     └── src/main/resources/rawfile/
         └── bridge.js            # JS 端注入代码
 ```
@@ -113,8 +178,23 @@ vue-web-sdk/                     # 前端 SDK（TypeScript，产出 TGZ）
 ├── src/
 │   ├── bridge.ts                # 核心实现（平台检测 + 双协议适配）
 │   ├── types.ts                # 类型定义
-│   └── index.ts                # 导出入口
-└── vite.config.ts              # Vite 库模式（ESM + CJS）
+│   ├── index.ts                # 导出入口
+│   ├── proto-plugin/            # Vite 插件：Proto Codegen
+│   │   ├── index.ts            # Plugin 入口（buildStart + configureServer watch）
+│   │   └── generators.ts       # TypeScript 源码生成器
+│   └── data-sync/
+│       ├── types.ts             # 类型定义（STANDARD_* 由 generated/ 导出）
+│       ├── decorators.ts        # 装饰器核心逻辑（waitDataSync/createWaitDecorator）
+│       ├── manager.ts           # 数据同步管理器
+│       ├── interceptor.ts       # Axios 请求拦截器
+│       ├── index.ts             # 模块导出
+│       └── generated/           # Proto codegen 生成产物
+│           ├── types.gen.ts     # TypeScript 接口
+│           ├── config.gen.ts    # 通道配置 + inject 默认值
+│           ├── decorators.gen.ts # @wait*Sync 装饰器
+│           └── handlers.gen.ts   # setupDataSyncHandlers()
+├── vite.config.ts              # Vite 库模式（ESM + CJS）+ mpProtoPlugin 注册
+└── package.json                # 依赖 @mp-sdk/proto-codegen
 ```
 
 ---
@@ -216,21 +296,24 @@ fun loadBridgeUrl(url: String)
 
 通过 KSP 编译期生成的 `DataSyncBindings` 注册表确定所需数据通道，构造注入，无运行时反射。
 
+> **注**：`@NeedsUserInfo` / `@NeedsLoanInfo` / `@NeedsVipInfo` 等标准通道注解、`DataSyncChannel` 通道常量、`DataSyncMethod` 方法映射、`setUserInfo` / `setLoanInfo` / `setVipInfo` 等 setter 方法，均由 `ProtoCodegenTask` 从 `specs/proto/channels.proto` 自动生成。`MPDataSync.kt` 仅保留 `@NeedsDataSync(channel)` 通用注解和 `MPDataSyncHelper` 核心逻辑。
+
 ```kotlin
 // 注解（标记在 Activity / Fragment 上，KSP 编译期扫描）
-@NeedsUserInfo    // 需要 userInfo 通道
-@NeedsLoanInfo    // 需要 loanInfo 通道
-@NeedsVipInfo     // 需要 vipInfo 通道
-@NeedsDataSync("orderInfo")  // 自定义通道
+// @NeedsUserInfo / @NeedsLoanInfo / @NeedsVipInfo 由 proto codegen 生成
+@NeedsUserInfo    // 需要 userInfo 通道（proto 生成）
+@NeedsLoanInfo    // 需要 loanInfo 通道（proto 生成）
+@NeedsVipInfo     // 需要 vipInfo 通道（proto 生成）
+@NeedsDataSync("orderInfo")  // 自定义通道（手动声明）
 
 // 创建 Helper（组合模式）
 val channels = DataSyncBindings.getChannels(this.javaClass.name)
 val helper = MPDataSyncHelper.create(webView, channels)
 
-// API
-helper.setUserInfo(data: String)   // 设置用户信息
-helper.setLoanInfo(data: String)   // 设置借款信息
-helper.setVipInfo(data: String)    // 设置会员信息
+// API（setter 方法由 proto codegen 生成为扩展函数）
+helper.setUserInfo(data: String)   // 设置用户信息（proto 生成）
+helper.setLoanInfo(data: String)   // 设置借款信息（proto 生成）
+helper.setVipInfo(data: String)    // 设置会员信息（proto 生成）
 helper.setData(channel, data)      // 设置指定通道数据
 helper.notifyPageLoaded()          // 通知页面加载完成，触发推送
 helper.notifyPageLoading()         // 通知页面开始加载
@@ -240,7 +323,7 @@ helper.reset()                      // 重置状态
 
 ### DataSyncBindings（KSP 自动生成）
 
-KSP 处理器在编译期扫描 `@NeedsUserInfo` 等注解，生成注册表对象：
+KSP 处理器在编译期扫描 `@Needs*` 注解（通过 `channel-mappings.json` 动态获取注解→通道映射），生成注册表对象：
 
 ```kotlin
 // 由 data-sync-processor 模块自动生成
@@ -358,6 +441,8 @@ struct MyPage {
 
 鸿蒙端数据同步辅助器，与 Android 端 MPDataSyncHelper 功能对等，不使用注解。
 
+> **注**：`DataSyncChannel` 通道常量、`DataSyncMethod` 方法映射、`setUserInfo` / `setLoanInfo` / `setVipInfo` 等 setter 方法均由 `proto-codegen-harmony.js` 从 `specs/proto/channels.proto` 自动生成到 `src/main/ets/generated/` 目录。`DataSyncHelper.ets` 通过 import 引用生成产物。
+
 ```typescript
 // 构造函数
 new DataSyncHelper(bridgeManager, requiredChannels, debug)
@@ -380,6 +465,8 @@ helper.getSyncState(): SyncState
 ---
 
 ## 7. 前端 SDK API
+
+> **注**：标准通道的 TypeScript 接口（`UserInfo` / `LoanInfo` / `VipInfo`）、通道配置（`STANDARD_CHANNELS` / `STANDARD_CHANNEL_CONFIGS`）、装饰器（`@waitUserInfoSync` 等）、Handler 注册函数（`setupDataSyncHandlers`）均由 Vite 插件 `mpProtoPlugin` 从 `specs/proto/channels.proto` 自动生成到 `src/data-sync/generated/` 目录。`index.ts` 从生成文件导出这些产物。
 
 ```typescript
 import { bridge, getBridge } from '@mp-sdk/bridge'
@@ -414,6 +501,8 @@ bridge.hasMethod('getUserInfo')
 
 ```bash
 npm run install:all      # 安装所有依赖
+npm run build:proto      # 构建共享 proto 解析器（specs/proto-codegen）
+npm run codegen:harmony   # 鸿蒙端 proto codegen（生成 ArkTS）
 npm run build:android    # 产出 AAR → output/android/
 npm run build:harmony    # 产出 HAR → output/harmony/
 npm run build:web        # 产出 TGZ → output/web/
@@ -425,6 +514,10 @@ npm run build:all        # 产出全部
 ```
 npm run build:android
   → cd android && gradlew.bat :and_web_library:assembleRelease
+    → :proto-codegen:compileKotlin           # 编译 Kotlin 解析器
+    → :and_web_library:protoCodegen          # JavaExec: 解析 proto → 生成 Kotlin 源码
+    → :and_web_library:compileReleaseKotlin   # 编译（含生成源码）
+    → :and_web_library:bundleReleaseAar
   → node scripts/post-build.js android
   → output/android/and_web_library-release.aar
 ```
@@ -432,12 +525,17 @@ npm run build:android
 - Gradle 9.2.1 + AGP 9.0.1
 - Kotlin DSL（build.gradle.kts）
 - 版本目录：`gradle/libs.versions.toml`
-- 模块：`:library`（JsBridge 源码） → `:and_web_library`（SDK 封装）
+- 模块：`:library`（JsBridge 源码）→ `:and_web_library`（SDK 封装）+ `:proto-codegen`（proto 解析器）
+- Proto Codegen 流水线：`ProtoCodegenTask`（JavaExec）调用 `Main.kt` → 生成 5 个 Kotlin 文件 + channel-mappings.json
+- `gradle.properties` 关键属性：
+  - `android.disallowKotlinSourceSets=false`（KSP 兼容）
+  - `android.sourceset.disallowProvider=false`（允许 Provider 进 SourceSet）
 
 ### 8.3 鸿蒙构建
 
 ```
 npm run build:harmony
+  → node scripts/proto-codegen-harmony.js    # Proto codegen（生成 ArkTS）
   → node scripts/build-harmony.js
     → DevEco Studio/tools/node/node.exe
     → DevEco Studio/tools/hvigor/bin/hvigorw.js
@@ -448,12 +546,15 @@ npm run build:harmony
 
 - 使用 DevEco Studio 内置 node（不依赖系统 node）
 - 环境变量：`DEVECO_HOME`（DevEco 安装路径）、`HOS_SDK_HOME`（鸿蒙 SDK 路径）
+- Proto Codegen 在 hvigor 构建前执行，确保生成产物在编译前就绪
 
 ### 8.4 前端 SDK 构建
 
 ```
 npm run build:web
-  → cd vue-web-sdk && npm run build (vite build + vue-tsc --declaration)
+  → cd vue-web-sdk && npm run build
+    → vite build         # Vite 插件 mpProtoPlugin 在 buildStart 解析 proto → 生成 .gen.ts
+    → vue-tsc --declaration  # 类型检查 + 生成 .d.ts
   → npm pack
   → node scripts/post-build.js web
   → output/web/mp-sdk-bridge-1.0.0.tgz
@@ -461,7 +562,8 @@ npm run build:web
 
 - Vite 库模式：ESM（`mp-bridge.js`）+ CJS（`mp-bridge.cjs`）
 - 类型声明：`vite-plugin-dts` 自动生成 `.d.ts`
-- 零运行时依赖
+- 零运行时依赖（`@mp-sdk/proto-codegen` 仅开发时依赖）
+- Vite 插件 `mpProtoPlugin`：`buildStart` 解析 proto 生成代码，`configureServer` watch proto 变化自动刷新 + HMR
 
 ### 8.5 产物输出
 
@@ -479,9 +581,9 @@ output/
 ### Android
 | 文件 | 职责 |
 |------|------|
-| `android/settings.gradle.kts` | 模块声明：app, library, and_web_library, data-sync-processor |
+| `android/settings.gradle.kts` | 模块声明：app, library, and_web_library, data-sync-processor, proto-codegen |
 | `android/gradle/libs.versions.toml` | 版本目录（AGP, Kotlin, KSP, Gson 等） |
-| `android/gradle.properties` | Gradle 属性（含 `disallowKotlinSourceSets=false` KSP 兼容） |
+| `android/gradle.properties` | Gradle 属性（含 `disallowKotlinSourceSets=false` + `sourceset.disallowProvider=false`） |
 | `android/library/build.gradle.kts` | JsBridge 源码模块构建配置 |
 | `android/library/src/.../BridgeWebView.java` | WebView 继承类，桥接核心 |
 | `android/library/src/.../BridgeHelper.java` | 桥接辅助类，消息队列管理 |
@@ -489,14 +591,20 @@ output/
 | `android/library/src/.../OnBridgeCallback.java` | 回调接口 |
 | `android/library/src/.../BridgeWebViewClient.java` | WebViewClient，JS 注入 |
 | `android/library/src/.../WebViewJavascriptBridge.js` | 注入 WebView 的 JS 桥接脚本 |
-| `android/and_web_library/build.gradle.kts` | SDK 模块构建配置 |
+| `android/and_web_library/build.gradle.kts` | SDK 模块构建配置（注册 ProtoCodegenTask） |
 | `android/and_web_library/.../MPBridgeWebView.kt` | 业务封装 WebView（final，组合模式） |
 | `android/and_web_library/.../MPBridgeConfig.kt` | 全局配置 |
-| `android/and_web_library/.../MPDataSync.kt` | 注解 + 通道常量 + MPDataSyncHelper（构造注入） |
+| `android/and_web_library/.../MPDataSync.kt` | @NeedsDataSync 通用注解 + MPDataSyncHelper 核心逻辑（注解/通道常量/setter 由 proto 生成） |
+| `android/proto-codegen/build.gradle.kts` | Kotlin proto 解析器模块构建配置（纯 Kotlin/JVM） |
+| `android/proto-codegen/.../ProtoParser.kt` | 轻量级 .proto 解析器（正则 + 状态机） |
+| `android/proto-codegen/.../NamingConventions.kt` | 命名约定推导（PascalCase ↔ camelCase ↔ sync + PascalCase） |
+| `android/proto-codegen/.../CodeGenerators.kt` | 生成 Kotlin 源码：注解、通道常量、方法映射、setter、JSON 元数据 |
+| `android/proto-codegen/.../Main.kt` | CLI 入口点，供 Gradle JavaExec 调用 |
 | `android/data-sync-processor/build.gradle.kts` | KSP 处理器模块构建配置（纯 Kotlin/JVM） |
-| `android/data-sync-processor/.../DataSyncSymbolProcessor.kt` | KSP 核心处理器，扫描注解生成注册表 |
+| `android/data-sync-processor/.../DataSyncSymbolProcessor.kt` | KSP 核心处理器，读取 channel-mappings.json + 扫描注解生成注册表 |
 | `android/data-sync-processor/.../DataSyncSymbolProcessorProvider.kt` | KSP Provider（SPI 注册） |
 | `android/data-sync-processor/.../META-INF/services/...SymbolProcessorProvider` | SPI 注册文件 |
+| `android/app/build.gradle.kts` | 示例应用配置（ksp options 传递 channel_mappings_path） |
 | `android/app/.../DataSyncDemoActivity.kt` | 组合模式示例 Activity（@NeedsUserInfo + @NeedsLoanInfo） |
 
 ### 鸿蒙
@@ -506,31 +614,49 @@ output/
 | `hm/hm_web_library/src/.../bridge/JSBridge.ets` | 桥接管理器，Handler 注册与分发 |
 | `hm/hm_web_library/src/.../bridge/BridgeHandler.ets` | Handler 接口定义 |
 | `hm/hm_web_library/src/.../bridge/BridgeModels.ets` | 数据模型（Request/Response） |
-| `hm/hm_web_library/src/.../bridge/DataSyncHelper.ets` | 通道常量 + DataSyncHelper 状态管理器 |
+| `hm/hm_web_library/src/.../bridge/DataSyncHelper.ets` | DataSyncHelper 状态管理器（引用 generated/ 产物） |
 | `hm/hm_web_library/src/.../bridge/DsBridgeProxy.ets` | javaScriptProxy 注入对象（独立导出） |
 | `hm/hm_web_library/src/.../bridge/BridgeUtils.ets` | 桥接工具类（appendPlatformParam + injectBridgeJs） |
-| `hm/hm_web_library/Index.ets` | 模块导出入口（含 DsBridgeProxy、BridgeUtils） |
+| `hm/hm_web_library/src/.../generated/DataSyncChannels.ets` | Proto 生成：通道常量 |
+| `hm/hm_web_library/src/.../generated/DataSyncMethods.ets` | Proto 生成：方法名推导 + fromChannel() |
+| `hm/hm_web_library/src/.../generated/DataSyncSetters.ets` | Proto 生成：setter 方法 |
+| `hm/hm_web_library/Index.ets` | 模块导出入口（含 DsBridgeProxy、BridgeUtils、generated 产物） |
 | `hm/hm_web_library/src/main/resources/rawfile/bridge.js` | JS 端注入代码（window.dsBridge） |
 
 ### 前端
 | 文件 | 职责 |
 |------|------|
-| `vue-web-sdk/src/bridge.ts` | 核心实现：平台检测 + 双协议适配 + 单例管理 + 数据同步 Handler |
+| `vue-web-sdk/src/bridge.ts` | 核心实现：平台检测 + 双协议适配 + 单例管理 + 数据同步 Handler（导入 generated/handlers.gen） |
 | `vue-web-sdk/src/types.ts` | 类型定义：IMPBridge, IAndroidJsBridge, IHarmonyBridge |
-| `vue-web-sdk/src/index.ts` | 导出入口 |
+| `vue-web-sdk/src/index.ts` | 导出入口（从 generated/ 导出标准通道/装饰器/接口） |
 | `vue-web-sdk/src/platform.ts` | URL 平台检测 |
-| `vue-web-sdk/src/data-sync/types.ts` | 数据同步类型与常量 |
+| `vue-web-sdk/src/proto-plugin/index.ts` | Vite 插件入口（buildStart + configureServer watch） |
+| `vue-web-sdk/src/proto-plugin/generators.ts` | TypeScript 源码生成器（types/config/decorators/handlers） |
+| `vue-web-sdk/src/data-sync/types.ts` | 数据同步类型定义（STANDARD_* 由 generated/ 导出） |
 | `vue-web-sdk/src/data-sync/manager.ts` | 多通道数据同步管理器 |
 | `vue-web-sdk/src/data-sync/interceptor.ts` | Axios 请求拦截器 |
-| `vue-web-sdk/src/data-sync/decorators.ts` | 方法装饰器 |
-| `vue-web-sdk/vite.config.ts` | Vite 库模式构建配置 |
+| `vue-web-sdk/src/data-sync/decorators.ts` | 装饰器核心逻辑（waitDataSync/createWaitDecorator） |
+| `vue-web-sdk/src/data-sync/generated/types.gen.ts` | Proto 生成：TypeScript 接口 |
+| `vue-web-sdk/src/data-sync/generated/config.gen.ts` | Proto 生成：STANDARD_CHANNELS + STANDARD_CHANNEL_CONFIGS |
+| `vue-web-sdk/src/data-sync/generated/decorators.gen.ts` | Proto 生成：@wait*Sync 装饰器 |
+| `vue-web-sdk/src/data-sync/generated/handlers.gen.ts` | Proto 生成：setupDataSyncHandlers() |
+| `vue-web-sdk/vite.config.ts` | Vite 库模式构建配置 + mpProtoPlugin 注册 |
 
-### 构建 & 协议
+### 共享 Proto & 构建脚本
 | 文件 | 职责 |
 |------|------|
-| `package.json` | 根目录 npm scripts |
+| `specs/proto/channels.proto` | SDK 预置标准通道 proto 定义（唯一真相源） |
+| `specs/proto/custom/` | 集成方扩展目录（可选） |
+| `specs/proto-codegen/src/parser.ts` | 轻量级 .proto 解析器（TS） |
+| `specs/proto-codegen/src/naming.ts` | 命名约定推导工具（TS） |
+| `specs/proto-codegen/src/model.ts` | 解析后的 Proto 数据模型 |
+| `specs/proto-codegen/src/index.ts` | 导出入口（@mp-sdk/proto-codegen） |
+| `specs/proto-codegen/package.json` | 共享解析器 npm 包配置 |
+| `specs/proto-codegen/tsconfig.json` | TypeScript 编译配置（CommonJS 输出） |
+| `scripts/proto-codegen-harmony.js` | 鸿蒙端 Proto Codegen 脚本 |
+| `scripts/build-harmony.js` | 鸿蒙 HAR 构建（含 proto codegen 预处理） |
 | `scripts/post-build.js` | 产物收集到 output/ |
-| `scripts/build-harmony.js` | 鸿蒙 HAR 构建（DevEco node + hvigor） |
+| `package.json` | 根目录 npm scripts（含 build:proto, codegen:harmony） |
 | `specs/bridge-protocol.ts` | 三端共享协议定义 |
 | `specs/propersal.md` | 需求文档 |
 
@@ -564,11 +690,15 @@ Native (Android/HarmonyOS)
 
 ### 10.4 标准数据通道
 
+> 以下通道由 `specs/proto/channels.proto` 定义，三端 codegen 自动生成对应的注解/装饰器/常量/setter。
+
 | 通道名 | Native 方法名 | 注入位置 | 说明 |
 |---|---|---|---|
 | userInfo | syncUserInfo | headers | uid → X-Uid, ticket → X-Ticket |
 | loanInfo | syncLoanInfo | body | 借款信息合并到请求体 |
 | vipInfo | syncVipInfo | body | 会员信息合并到请求体 |
+
+> 注入位置（injectTo）和 headerMap 为 SDK 默认配置（非 proto 来源），集成方可通过 API 覆盖。
 
 ### 10.5 两种触发模式
 
@@ -604,12 +734,14 @@ Native (Android/HarmonyOS)
 
 **注解体系：**
 
-| 注解 | 通道 | JSBridge 方法 |
-|------|------|---------------|
-| `@NeedsUserInfo` | userInfo | syncUserInfo |
-| `@NeedsLoanInfo` | loanInfo | syncLoanInfo |
-| `@NeedsVipInfo` | vipInfo | syncVipInfo |
-| `@NeedsDataSync(channel)` | 自定义 | sync{Channel} |
+> `@NeedsUserInfo` / `@NeedsLoanInfo` / `@NeedsVipInfo` 标准通道注解由 `ProtoCodegenTask` 从 proto 自动生成。`@NeedsDataSync(channel)` 为手动声明的通用注解，用于 proto 未定义的临时通道。
+
+| 注解 | 通道 | JSBridge 方法 | 来源 |
+|------|------|---------------|------|
+| `@NeedsUserInfo` | userInfo | syncUserInfo | proto 生成 |
+| `@NeedsLoanInfo` | loanInfo | syncLoanInfo | proto 生成 |
+| `@NeedsVipInfo` | vipInfo | syncVipInfo | proto 生成 |
+| `@NeedsDataSync(channel)` | 自定义 | sync{Channel} | 手动声明 |
 
 **主模块使用方式（组合模式）：**
 ```kotlin
@@ -640,9 +772,11 @@ class DataSyncDemoActivity : AppCompatActivity() {
 
 **KSP 处理器机制：**
 - `DataSyncSymbolProcessor` 实现 `SymbolProcessor` 接口
-- `process()` 调用 `resolver.getSymbolsWithAnnotation()` 扫描四种注解
+- `process()` 调用 `resolver.getSymbolsWithAnnotation()` 扫描所有 `@Needs*` 注解
+- 通过 `channel-mappings.json`（由 ProtoCodegenTask 生成）动态获取注解→通道映射，不再硬编码
 - 通过 `CodeGenerator` 生成 `DataSyncBindings.kt` 源文件
 - SPI 机制：`META-INF/services/...SymbolProcessorProvider` 注册 Provider
+- KSP options：`channel_mappings_path` 指向 channel-mappings.json 路径
 
 **MPDataSyncHelper 内部机制：**
 - 构造函数接收 `BridgeWebView` + `Set<String>` 通道集合（无反射）
@@ -655,7 +789,10 @@ class DataSyncDemoActivity : AppCompatActivity() {
 
 | 文件 | 职责 |
 |------|------|
-| `DataSyncHelper.ets` | 通道常量 + `DataSyncHelper` 状态管理器（无注解） |
+| `DataSyncHelper.ets` | `DataSyncHelper` 状态管理器（引用 generated/ 产物，无注解） |
+| `generated/DataSyncChannels.ets` | Proto 生成：通道常量 |
+| `generated/DataSyncMethods.ets` | Proto 生成：方法名推导 + fromChannel() |
+| `generated/DataSyncSetters.ets` | Proto 生成：setter 方法 |
 | `DsBridgeProxy.ets` | `javaScriptProxy` 注入对象（独立导出） |
 | `BridgeUtils.ets` | 桥接工具类（`appendPlatformParam` + `injectBridgeJs`） |
 | `MPBridgeWeb.ets` | 可选便捷封装组件（内部委托给工具类） |
@@ -736,7 +873,103 @@ SyncState:
 
 ---
 
-## 11. 技术栈版本
+## 11. Proto 驱动的 Codegen 架构
+
+### 11.1 架构总览
+
+```
+specs/proto/channels.proto（唯一真相源）
+  │
+  ├──→ Android: Gradle ProtoCodegenTask (JavaExec + Main.kt)
+  │      → 生成 Kotlin 源码（注解、通道常量、方法映射、setter、channel-mappings.json）
+  │      → KSP 读取 mappings → 扫描 @Needs* → 生成 DataSyncBindings
+  │
+  ├──→ Vue: Vite 插件 mpProtoPlugin (buildStart + watch)
+  │      → 生成 TypeScript 源码（接口、装饰器、配置、Handler）
+  │
+  └──→ 鸿蒙: Node.js 脚本 proto-codegen-harmony.js
+         → 生成 ArkTS 源码（通道常量、方法映射、setter）
+```
+
+### 11.2 共享解析器（specs/proto-codegen）
+
+轻量级自定义 .proto 解析器（非完整 protoc），仅提取 Message 名、字段名、字段类型。
+
+| 文件 | 职责 |
+|------|------|
+| `parser.ts` | 正则 + 状态机解析 .proto，提取 message/field/repeated |
+| `naming.ts` | 命名约定推导：PascalCase ↔ camelCase ↔ sync + PascalCase |
+| `model.ts` | ProtoFile / ProtoMessage / ProtoField 数据模型 |
+
+npm 包 `@mp-sdk/proto-codegen`，供 Vue Vite 插件和鸿蒙 codegen 脚本使用。
+Android 端有独立的 Kotlin 版解析器（`android/proto-codegen/`），逻辑对等。
+
+### 11.3 Android Codegen 流水线
+
+**Stage 1：Proto → SDK 源码（Gradle ProtoCodegenTask）**
+
+```
+输入: specs/proto/channels.proto
+输出: and_web_library/build/generated/proto/kotlin/
+  ├── MPDataSyncAnnotations.kt     # @NeedsUserInfo, @NeedsLoanInfo, @NeedsVipInfo 注解定义
+  ├── DataSyncChannels.kt          # object DataSyncChannel { const val USER_INFO = "userInfo" }
+  ├── DataSyncMethods.kt           # object DataSyncMethod { const val SYNC_USER_INFO = "syncUserInfo"; fun fromChannel() }
+  ├── MPDataSyncHelperSetters.kt   # fun MPDataSyncHelper.setUserInfo(data) = setData(...)
+  └── channel-mappings.json        # 元数据映射（供 KSP 读取）
+```
+
+**Stage 2：KSP → App 绑定（DataSyncSymbolProcessor 通用化）**
+
+```
+输入: App 代码中的 @Needs* 注解 + channel-mappings.json
+输出: app/build/generated/ksp/.../DataSyncBindings.kt
+  # when(className) -> setOf("userInfo", "loanInfo")
+```
+
+### 11.4 Vue Codegen 流水线（Vite 插件）
+
+```
+输入: specs/proto/channels.proto
+输出: vue-web-sdk/src/data-sync/generated/
+  ├── types.gen.ts       # TypeScript 接口（UserInfo, LoanInfo, VipInfo）
+  ├── config.gen.ts      # STANDARD_CHANNELS + STANDARD_CHANNEL_CONFIGS（含 inject 默认值）
+  ├── decorators.gen.ts  # @waitUserInfoSync / @waitLoanInfoSync / @waitVipInfoSync
+  └── handlers.gen.ts    # setupDataSyncHandlers() 函数
+```
+
+- `buildStart()` 钩子：解析 proto → 生成 .ts 文件
+- `configureServer()` 钩子：watch proto 文件变化 → 增量重新生成 → 触发 HMR
+- 生成文件头部标记 `// AUTO-GENERATED from proto. DO NOT EDIT.`
+
+### 11.5 鸿蒙 Codegen 流水线（Node.js 脚本）
+
+```
+输入: specs/proto/channels.proto
+输出: hm/hm_web_library/src/main/ets/generated/
+  ├── DataSyncChannels.ets   # export class DataSyncChannel { static readonly USER_INFO }
+  ├── DataSyncMethods.ets    # export class DataSyncMethod { static readonly SYNC_USER_INFO; static fromChannel() }
+  └── DataSyncSetters.ets    # export class DataSyncSetters { setUserInfo(data) }
+```
+
+- 在 `build-harmony.js` 之前执行，确保产物在 hvigor 编译前就绪
+- 复用 `@mp-sdk/proto-codegen` 共享解析器
+
+### 11.6 扩展流程：新增通道
+
+以新增 `LeadUserinfo` 通道为例：
+
+1. 在 `specs/proto/channels.proto` 中新增 `message LeadUserinfo { string leadId = 1; ... }`
+2. 保存 proto 文件
+3. **Android**：Gradle Task 自动生成 `@NeedsLeadUserinfo` 注解 + `LEAD_USERINFO` 常量 + `setLeadUserinfo` setter
+4. **Vue**：Vite 插件 watch 自动生成 `@waitLeadUserinfoSync` 装饰器 + `LeadUserinfo` 接口
+5. **鸿蒙**：codegen 脚本自动生成 `DataSyncChannel.LEAD_USERINFO` + `setLeadUserinfo` setter
+6. 业务代码直接使用 `@NeedsLeadUserinfo` / `@waitLeadUserinfoSync` / `DataSyncChannel.LEAD_USERINFO`
+
+> 无需修改任何 SDK 源码，三端自动生成对应代码。
+
+---
+
+## 12. 技术栈版本
 
 | 组件 | 版本 |
 |------|------|
@@ -750,4 +983,6 @@ SyncState:
 | Gson | 2.10.1 |
 | Vite | ^5.4.21 |
 | TypeScript | ~5.6.0 |
+| @mp-sdk/proto-codegen | 1.0.0 (file:specs/proto-codegen) |
+| Protocol Buffers | proto3 (仅 Schema，运行时 JSON) |
 | 鸿蒙 DevEco Studio | 内置 node + hvigor |
