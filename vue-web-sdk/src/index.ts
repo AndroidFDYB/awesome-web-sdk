@@ -96,6 +96,10 @@ export {
   waitVipInfoSync,
 } from './data-sync/generated/decorators.gen';
 
+// AppLink 模块
+export { jump2Native, JUMP2NATIVE_METHOD } from './app-link';
+export type { AppLinkCallParams, AppLinkResult } from './app-link';
+
 // 便捷导出默认实例
 import { getBridge } from './bridge';
 import { getPlatform } from './platform';

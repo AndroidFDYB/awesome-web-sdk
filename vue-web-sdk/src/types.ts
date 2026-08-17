@@ -42,6 +42,9 @@ export interface IMPBridge {
 
   /** 检查方法是否已注册 */
   hasMethod(method: string): boolean;
+
+  /** 调用 Native 页面跳转（透传 scheme 字符串） */
+  jump2Native(scheme: string): Promise<{ code: number; message: string }>;
 }
 
 /**

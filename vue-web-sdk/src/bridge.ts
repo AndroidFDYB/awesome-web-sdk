@@ -17,6 +17,7 @@ import { getDataSyncManager } from './data-sync/manager';
 import { getPlatform as getPlatformEnhanced } from './platform';
 // setupDataSyncHandlers 由 proto codegen 自动生成
 import { setupDataSyncHandlers as registerDataSyncHandlers } from './data-sync/generated/handlers.gen';
+import type { AppLinkResult } from './app-link/types';
 
 // ========================
 // 平台检测
@@ -300,6 +301,22 @@ class MPBridgeImpl implements IMPBridge {
     if (this.androidAdapter) return this.androidAdapter.hasMethod(method);
     if (this.harmonyAdapter) return this.harmonyAdapter.hasMethod(method);
     return false;
+  }
+
+  /**
+   * 调用 Native 页面跳转（透传 scheme 字符串）
+   * 通过 JSBridge 将 scheme 字符串传递给 Native 端解析并执行跳转
+   */
+  async jump2Native(scheme: string): Promise<AppLinkResult> {
+    if (!this.hasNativeBridge()) {
+      console.warn('[MPBridge/AppLink] No native bridge available. Cannot execute jump2Native.');
+      return { code: -2, message: 'No native bridge available' };
+    }
+    const result = await this.callAsync('jump2Native', { scheme });
+    if (result && typeof result === 'object' && 'code' in result) {
+      return result as AppLinkResult;
+    }
+    return { code: 0, message: 'success' };
   }
 
   /**

@@ -1,41 +1,41 @@
-const M = "platform", B = ["android", "harmony", "web"];
-function m() {
+const S = "platform", B = ["android", "harmony", "web"];
+function b() {
   if (typeof window > "u" || !window.location)
     return null;
-  const e = new URLSearchParams(window.location.search).get(M);
+  const e = new URLSearchParams(window.location.search).get(S);
   return e && B.includes(e) ? e : null;
 }
-function b() {
+function A() {
   if (typeof window > "u")
     return "unknown";
   const n = window;
   return n.WebViewJavascriptBridge ? "android" : n.__harmony_bridge && n.dsBridge ? "harmony" : "web";
 }
-function w() {
-  const n = m();
-  return n || b();
+function m() {
+  const n = b();
+  return n || A();
 }
-function L() {
-  const n = w();
+function k() {
+  const n = m();
   return n === "android" || n === "harmony";
 }
 function V() {
   var e;
   const n = typeof window < "u" ? window : null;
   return {
-    urlPlatform: m(),
-    windowPlatform: b(),
-    finalPlatform: w(),
+    urlPlatform: b(),
+    windowPlatform: A(),
+    finalPlatform: m(),
     hasAndroidBridge: !!(n != null && n.WebViewJavascriptBridge),
     hasHarmonyBridge: !!(n != null && n.__harmony_bridge && (n != null && n.dsBridge)),
     url: ((e = n == null ? void 0 : n.location) == null ? void 0 : e.href) ?? null
   };
 }
-const k = {
+const U = {
   UserInfo: "userInfo",
   LoanInfo: "loanInfo",
   VipInfo: "vipInfo"
-}, A = [
+}, v = [
   {
     name: "userInfo",
     nativeMethod: "syncUserInfo",
@@ -56,7 +56,7 @@ const k = {
     timeout: 1e4
   }
 ];
-class T {
+class j {
   constructor(e, t) {
     this.state = { data: null, ready: !1, arrivedAt: null }, this.waiters = [], this.config = e, this.managerConfig = t;
   }
@@ -115,7 +115,7 @@ class T {
     this.managerConfig.debug && console.log(`[DataSync:${this.managerConfig.logTag ?? "MPBridge"}] ${e}`);
   }
 }
-class $ {
+class T {
   constructor(e = {}) {
     this.channels = /* @__PURE__ */ new Map(), this.config = {
       defaultTimeout: 1e4,
@@ -123,7 +123,7 @@ class $ {
       logTag: "MPBridge",
       ...e
     };
-    for (const t of A)
+    for (const t of v)
       this.registerChannel(t);
   }
   /**
@@ -131,7 +131,7 @@ class $ {
    * 如果通道已存在，将更新其配置
    */
   registerChannel(e) {
-    this.channels.has(e.name) && this.debug(`Channel "${e.name}" already registered, updating config`), this.channels.set(e.name, new T(e, this.config)), this.debug(`Registered channel "${e.name}" (nativeMethod: ${e.nativeMethod}, injectTo: ${e.injectTo ?? "body"})`);
+    this.channels.has(e.name) && this.debug(`Channel "${e.name}" already registered, updating config`), this.channels.set(e.name, new j(e, this.config)), this.debug(`Registered channel "${e.name}" (nativeMethod: ${e.nativeMethod}, injectTo: ${e.injectTo ?? "body"})`);
   }
   /** 获取通道配置 */
   getChannelConfig(e) {
@@ -206,14 +206,14 @@ class $ {
 }
 let l = null;
 function f(n) {
-  return l ? n && Object.assign(l.config, n) : l = new $(n), l;
+  return l ? n && Object.assign(l.config, n) : l = new T(n), l;
 }
-function U() {
+function q() {
   l = null;
 }
 function D() {
-  const n = S();
-  for (const e of A) {
+  const n = w();
+  for (const e of v) {
     const t = e.name, r = e.nativeMethod;
     n.register(r, (a) => {
       let i = a;
@@ -227,13 +227,13 @@ function D() {
     });
   }
 }
-function j() {
+function $() {
   if (typeof window > "u")
     return { platform: "unknown", bridgeType: "none" };
   const n = window;
   return n.WebViewJavascriptBridge ? { platform: "android", bridgeType: "android-jsbridge" } : n.__harmony_bridge && n.dsBridge ? { platform: "harmony", bridgeType: "harmony-dsbridge" } : { platform: "web", bridgeType: "none" };
 }
-function P(n) {
+function N(n) {
   const e = window;
   if (e.WebViewJavascriptBridge) {
     n(e.WebViewJavascriptBridge);
@@ -244,7 +244,7 @@ function P(n) {
   };
   document.addEventListener("WebViewJavascriptBridgeReady", t, !1);
 }
-class I {
+class P {
   constructor(e) {
     this.registeredMethods = /* @__PURE__ */ new Set(), this.bridge = e;
   }
@@ -261,7 +261,7 @@ class I {
     return this.registeredMethods.has(e);
   }
 }
-class H {
+class I {
   constructor(e) {
     this.bridge = e;
   }
@@ -281,15 +281,15 @@ class H {
     return this.bridge.hasMethod(e);
   }
 }
-class R {
+class H {
   constructor() {
-    this.androidAdapter = null, this.harmonyAdapter = null, this.jsHandlers = /* @__PURE__ */ new Map(), this.jsAsyncHandlers = /* @__PURE__ */ new Map(), this.ready = !1, this.pendingCalls = [], this.detectResult = j(), this.initBridge();
+    this.androidAdapter = null, this.harmonyAdapter = null, this.jsHandlers = /* @__PURE__ */ new Map(), this.jsAsyncHandlers = /* @__PURE__ */ new Map(), this.ready = !1, this.pendingCalls = [], this.detectResult = $(), this.initBridge();
   }
   initBridge() {
     const { platform: e, bridgeType: t } = this.detectResult, r = typeof window < "u" ? window : null;
-    t === "android-jsbridge" && (r != null && r.WebViewJavascriptBridge) ? P((a) => {
-      this.androidAdapter = new I(a), this.onReady();
-    }) : t === "harmony-dsbridge" && (r != null && r.dsBridge) ? (this.harmonyAdapter = new H(r.dsBridge), this.onReady()) : this.ready = !0;
+    t === "android-jsbridge" && (r != null && r.WebViewJavascriptBridge) ? N((a) => {
+      this.androidAdapter = new P(a), this.onReady();
+    }) : t === "harmony-dsbridge" && (r != null && r.dsBridge) ? (this.harmonyAdapter = new I(r.dsBridge), this.onReady()) : this.ready = !0;
   }
   onReady() {
     this.ready = !0, this.jsHandlers.forEach((e, t) => {
@@ -299,7 +299,7 @@ class R {
     }), u || (D(), u = !0), this.pendingCalls.forEach((e) => e()), this.pendingCalls = [];
   }
   getPlatform() {
-    return w();
+    return m();
   }
   hasNativeBridge() {
     return this.androidAdapter !== null || this.harmonyAdapter !== null;
@@ -368,6 +368,16 @@ class R {
     return this.jsHandlers.has(e) || this.jsAsyncHandlers.has(e) ? !0 : this.androidAdapter ? this.androidAdapter.hasMethod(e) : this.harmonyAdapter ? this.harmonyAdapter.hasMethod(e) : !1;
   }
   /**
+   * 调用 Native 页面跳转（透传 scheme 字符串）
+   * 通过 JSBridge 将 scheme 字符串传递给 Native 端解析并执行跳转
+   */
+  async jump2Native(e) {
+    if (!this.hasNativeBridge())
+      return console.warn("[MPBridge/AppLink] No native bridge available. Cannot execute jump2Native."), { code: -2, message: "No native bridge available" };
+    const t = await this.callAsync("jump2Native", { scheme: e });
+    return t && typeof t == "object" && "code" in t ? t : { code: 0, message: "success" };
+  }
+  /**
    * 将 handler 注册到原生桥
    */
   registerToNative(e, t, r) {
@@ -390,24 +400,24 @@ class R {
   }
 }
 let h = null;
-function S() {
-  return h || (h = new R()), h;
+function w() {
+  return h || (h = new H()), h;
 }
-function q() {
+function G() {
   h = null, u = !1;
 }
 let u = !1;
-function G() {
+function Q() {
   u || (D(), u = !0);
 }
 const d = [];
 function C(n) {
   d.push(n);
 }
-function N() {
+function R() {
   return d.pop();
 }
-function W() {
+function E() {
   return d.length > 0 ? [...d[d.length - 1]] : [];
 }
 function J(n, e) {
@@ -415,7 +425,7 @@ function J(n, e) {
   const t = e.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "###GLOBSTAR###").replace(/\*/g, "[^/]*").replace(/###GLOBSTAR###/g, ".*");
   return new RegExp(`^${t}(/.*)?$`).test(n);
 }
-function _(n, e, t) {
+function W(n, e, t) {
   if (t == null) return;
   if (typeof e.inject == "function") {
     e.inject(n, t);
@@ -442,12 +452,12 @@ function _(n, e, t) {
     }
   }
 }
-function E(n) {
+function _(n) {
   const e = f(), t = n.enableDecoratorContext !== !1;
   return async function(a) {
     const i = /* @__PURE__ */ new Set();
     if (t) {
-      const s = W();
+      const s = E();
       for (const o of s)
         i.add(o);
     }
@@ -462,7 +472,7 @@ function E(n) {
       if (o)
         try {
           const c = await e.waitForData(s, o.timeout);
-          _(a, o, c);
+          W(a, o, c);
         } catch (c) {
           console.warn(
             `[DataSync] Failed to get data for channel "${s}":`,
@@ -473,8 +483,8 @@ function E(n) {
     return a;
   };
 }
-function Q(n, e) {
-  const t = E(e);
+function X(n, e) {
+  const t = _(e);
   return n.interceptors.request.use(t);
 }
 const p = /* @__PURE__ */ new WeakMap();
@@ -484,7 +494,7 @@ function F(n, e, t) {
   const a = r.get(e) || [];
   return a.includes(t) || a.push(t), r.set(e, a), a;
 }
-function v(n, e) {
+function M(n, e) {
   const t = p.get(n);
   return (t == null ? void 0 : t.get(e)) || [];
 }
@@ -493,7 +503,7 @@ function g(n) {
     F(e, t, n);
     const a = r.value;
     return r.value = async function(...i) {
-      const s = f(), o = v(e, t);
+      const s = f(), o = M(e, t);
       for (const c of o)
         try {
           await s.waitForData(c);
@@ -507,7 +517,7 @@ function g(n) {
       try {
         return await a.apply(this, i);
       } finally {
-        N();
+        R();
       }
     }, Object.defineProperty(r.value, "name", {
       value: a.name,
@@ -515,38 +525,48 @@ function g(n) {
     }), r;
   };
 }
-function X(n, e) {
-  return v(n, e);
+function Y(n, e) {
+  return M(n, e);
 }
-function Y(n) {
+function z(n) {
   return f().registerChannel(n), g(n.name);
 }
-const z = g("userInfo"), K = g("loanInfo"), Z = g("vipInfo"), O = S();
+const K = g("userInfo"), Z = g("loanInfo"), O = g("vipInfo"), L = "jump2Native";
+async function x(n) {
+  const e = w();
+  if (!e.hasNativeBridge())
+    return console.warn("[MPBridge/AppLink] No native bridge available. Cannot execute jump2Native."), { code: -2, message: "No native bridge available" };
+  const t = { scheme: n }, r = await e.callAsync(L, t);
+  return r && typeof r == "object" && "code" in r ? r : { code: 0, message: "success" };
+}
+const ee = w();
 export {
-  $ as DataSyncManager,
-  M as PLATFORM_QUERY_KEY,
-  k as STANDARD_CHANNELS,
-  A as STANDARD_CHANNEL_CONFIGS,
-  O as bridge,
-  E as createDataSyncInterceptor,
-  Y as createWaitDecorator,
-  m as detectPlatformFromUrl,
-  b as detectPlatformFromWindow,
-  S as getBridge,
+  T as DataSyncManager,
+  L as JUMP2NATIVE_METHOD,
+  S as PLATFORM_QUERY_KEY,
+  U as STANDARD_CHANNELS,
+  v as STANDARD_CHANNEL_CONFIGS,
+  ee as bridge,
+  _ as createDataSyncInterceptor,
+  z as createWaitDecorator,
+  b as detectPlatformFromUrl,
+  A as detectPlatformFromWindow,
+  w as getBridge,
   f as getDataSyncManager,
-  X as getMethodWaitChannels,
-  w as getPlatform,
+  Y as getMethodWaitChannels,
+  m as getPlatform,
   V as getPlatformDebugInfo,
-  w as getPlatformFromUrl,
-  _ as injectDataToConfig,
-  L as isNativeEnvironment,
+  m as getPlatformFromUrl,
+  W as injectDataToConfig,
+  k as isNativeEnvironment,
+  x as jump2Native,
   J as matchUrlPattern,
-  q as resetBridge,
-  U as resetDataSyncManager,
-  G as setupDataSyncHandlers,
-  Q as setupDataSyncInterceptor,
+  G as resetBridge,
+  q as resetDataSyncManager,
+  Q as setupDataSyncHandlers,
+  X as setupDataSyncInterceptor,
   g as waitDataSync,
-  K as waitLoanInfoSync,
-  z as waitUserInfoSync,
-  Z as waitVipInfoSync
+  Z as waitLoanInfoSync,
+  K as waitUserInfoSync,
+  O as waitVipInfoSync
 };

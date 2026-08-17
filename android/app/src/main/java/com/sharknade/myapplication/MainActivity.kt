@@ -45,12 +45,18 @@ fun DataSyncDemoLauncher(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = "MP-SDK 数据同步验证", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        Text(text = "MP-SDK 数据同步 & AppLink 验证", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
         androidx.compose.material3.Button(onClick = {
             context.startActivity(Intent(context, com.sharknade.myapplication.webview.DataSyncDemoActivity::class.java))
         }) {
             Text("启动数据同步验证")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        androidx.compose.material3.Button(onClick = {
+            context.startActivity(Intent(context, com.sharknade.myapplication.webview.WebViewForVipActivity::class.java))
+        }) {
+            Text("启动 WebViewForVip")
         }
     }
 }

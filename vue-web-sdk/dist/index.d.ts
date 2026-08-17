@@ -43,6 +43,8 @@ export { DataSyncManager, getDataSyncManager, resetDataSyncManager, } from './da
 export { createDataSyncInterceptor, setupDataSyncInterceptor, injectDataToConfig, matchUrlPattern, } from './data-sync/interceptor';
 export { waitDataSync, createWaitDecorator, getMethodWaitChannels, } from './data-sync/decorators';
 export { waitUserInfoSync, waitLoanInfoSync, waitVipInfoSync, } from './data-sync/generated/decorators.gen';
+export { jump2Native, JUMP2NATIVE_METHOD } from './app-link';
+export type { AppLinkCallParams, AppLinkResult } from './app-link';
 import { getPlatform } from './platform';
 export declare const bridge: import("./types").IMPBridge;
 export { getPlatform };

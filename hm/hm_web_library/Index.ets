@@ -8,3 +8,6 @@ export { DataSyncChannel } from './src/main/ets/generated/DataSyncChannels';
 export { DataSyncMethod } from './src/main/ets/generated/DataSyncMethods';
 export { DsBridgeProxy } from './src/main/ets/bridge/DsBridgeProxy';
 export { BridgeUtils } from './src/main/ets/bridge/BridgeUtils';
+export { AppLinkParser } from './src/main/ets/applink/AppLinkParser';
+export { AppLinkHandler, AppLinkActionDelegate } from './src/main/ets/applink/AppLinkHandler';
+export { AppLinkParams, PAGE_TRANSPARENT, isTransparentPage } from './src/main/ets/applink/AppLinkParams';

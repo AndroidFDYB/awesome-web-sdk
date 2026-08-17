@@ -34,7 +34,7 @@ struct Index {
         })
 
       // 导航到 VipPage
-      Button('会员页面 (VipPage)')
+      Button('会员页面 (VipPage AppLink)')
         .fontSize(16)
         .width('80%')
         .height(48)

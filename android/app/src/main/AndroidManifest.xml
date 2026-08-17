@@ -29,6 +29,16 @@
             android:name=".webview.DataSyncDemoActivity"
             android:exported="false"
             android:label="数据同步验证" />
+        <activity
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:name=".webview.WebViewForVipActivity"
+            android:exported="false"
+            android:label="VIP 会员页面" />
+        <activity
+            android:theme="@style/Theme.Translucent"
+            android:name=".webview.TransparentWebActivity"
+            android:exported="false"
+            android:label="透明弹窗" />
     </application>
 
 </manifest>
