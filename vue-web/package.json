@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "vue": "^3.5.40",
+    "axios": "^1.7.0",
     "@mp-sdk/bridge": "file:../vue-web-sdk"
   },
   "devDependencies": {

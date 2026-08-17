@@ -34,6 +34,10 @@ public class BridgeWebView extends WebView implements WebViewJavascriptBridge, B
 	private final int URL_MAX_CHARACTER_NUM=2097152;
     private Map<String, OnBridgeCallback> mCallbacks = new ArrayMap<>();
 
+    private Map<String, BridgeHandler> messageHandlers = new HashMap<>();
+
+    private BridgeHandler defaultHandler = new DefaultHandler();
+
     private List<Object> mMessages = new ArrayList<>();
 
     private BridgeWebViewClient mClient;
@@ -76,6 +80,31 @@ public class BridgeWebView extends WebView implements WebViewJavascriptBridge, B
 
     public void setGson(Gson gson) {
         mGson = gson;
+    }
+
+    /**
+     * register handler, so that javascript can call it
+     */
+    public void registerHandler(String handlerName, BridgeHandler handler) {
+        if (handler != null) {
+            messageHandlers.put(handlerName, handler);
+        }
+    }
+
+    /**
+     * unregister handler
+     */
+    public void unregisterHandler(String handlerName) {
+        if (handlerName != null) {
+            messageHandlers.remove(handlerName);
+        }
+    }
+
+    /**
+     * set default handler, handle messages send by js without assigned handler name
+     */
+    public void setDefaultHandler(BridgeHandler handler) {
+        this.defaultHandler = handler;
     }
 
     public boolean isJSLoaded() {

@@ -5,6 +5,8 @@
   "main": "",
   "author": "",
   "license": "",
-  "dependencies": {}
+  "dependencies": {
+    "hm_web_library": "file:../hm_web_library"
+  }
 }
 

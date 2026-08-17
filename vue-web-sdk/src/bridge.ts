@@ -13,6 +13,9 @@
  */
 
 import type { Platform, IMPBridge, SyncHandler, AsyncHandler, IAndroidJsBridge, IHarmonyBridge } from './types';
+import { getDataSyncManager } from './data-sync/manager';
+import { STANDARD_CHANNEL_CONFIGS } from './data-sync/types';
+import { getPlatform as getPlatformEnhanced } from './platform';
 
 // ========================
 // 平台检测
@@ -182,13 +185,16 @@ class MPBridgeImpl implements IMPBridge {
     this.jsAsyncHandlers.forEach((handler, method) => {
       this.registerToNative(method, handler, true);
     });
+    // 自动注册数据同步 Handler（Native → JS 数据推送）
+    setupDataSyncHandlers();
     // 执行待处理的调用
     this.pendingCalls.forEach(fn => fn());
     this.pendingCalls = [];
   }
 
   getPlatform(): Platform {
-    return this.detectResult.platform;
+    // 优先使用增强版平台检测（URL 参数 > Window 对象）
+    return getPlatformEnhanced();
   }
 
   hasNativeBridge(): boolean {
@@ -338,7 +344,56 @@ export function getBridge(): IMPBridge {
 
 /**
  * 重置实例（用于测试或环境变化时）
+ * 同时重置数据同步 Handler 注册标记，以便重新注册
  */
 export function resetBridge(): void {
   instance = null;
+  dataSyncHandlersRegistered = false;
+}
+
+// ========================
+// 数据同步 Handler 自动注册
+// ========================
+
+/** 标记是否已注册数据同步 Handler */
+let dataSyncHandlersRegistered = false;
+
+/**
+ * 自动注册标准数据同步 Handler
+ *
+ * 当 Bridge 就绪后，自动注册以下 JS Handler 供 Native 调用：
+ * - syncUserInfo：接收 Native 推送的用户信息（uid + ticket）
+ * - syncLoanInfo：接收 Native 推送的借款信息
+ * - syncVipInfo：接收 Native 推送的会员信息
+ *
+ * Native 端调用方式：
+ *   Android: webView.callBridgeHandler("syncUserInfo", dataJson)
+ *   鸿蒙: bridgeManager.callJs("syncUserInfo", [dataJson])
+ *
+ * 收到数据后，自动调用 DataSyncManager.pushData() 唤醒等待队列。
+ *
+ * 此函数在 bridge onReady 时自动调用，也可手动调用以重新注册。
+ */
+export function setupDataSyncHandlers(): void {
+  if (dataSyncHandlersRegistered) return;
+
+  const bridge = getBridge();
+
+  for (const channelConfig of STANDARD_CHANNEL_CONFIGS) {
+    const channelName = channelConfig.name;
+    const nativeMethod = channelConfig.nativeMethod;
+
+    // 注册 Handler：Native 调用 syncXxx → pushData 到对应通道
+    // 注意：每次从单例动态获取 DataSyncManager，避免闭包绑定旧实例
+    bridge.register(nativeMethod, (params: any) => {
+      let data = params;
+      if (typeof params === 'string') {
+        try { data = JSON.parse(params); } catch { data = params; }
+      }
+      getDataSyncManager().pushData(channelName, data);
+      return { success: true, channel: channelName };
+    });
+  }
+
+  dataSyncHandlersRegistered = true;
 }

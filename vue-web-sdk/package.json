@@ -23,6 +23,14 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {},
+  "peerDependencies": {
+    "axios": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "axios": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "typescript": "~5.6.0",
     "vite": "^5.4.21",
