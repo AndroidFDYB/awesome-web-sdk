@@ -4,7 +4,7 @@
  * 将各平台构建产物拷贝到统一的 output/ 目录
  *
  * 用法：node scripts/post-build.js <platform>
- *   platform: android | harmony | web
+ *   platform: android | harmony | web | ios
  */
 
 const fs = require('fs');
@@ -87,6 +87,25 @@ function postBuildHarmony() {
   console.log('  HarmonyOS build output collected successfully.');
 }
 
+function postBuildIos() {
+  console.log('\n[Post-Build] iOS - Collecting ZIP...');
+  const outputDir = path.join(OUTPUT_DIR, 'ios');
+  ensureDir(outputDir);
+
+  const zipDir = path.join(ROOT, 'ios', 'ios_web_library', 'build');
+  const zipFiles = findFiles(zipDir, '.zip');
+
+  if (zipFiles.length === 0) {
+    console.error('  ERROR: No ZIP files found in', zipDir);
+    process.exit(1);
+  }
+
+  for (const zip of zipFiles) {
+    copyFile(zip, path.join(outputDir, path.basename(zip)));
+  }
+  console.log('  iOS SDK build output collected successfully.');
+}
+
 function postBuildWeb() {
   console.log('\n[Post-Build] Web - Collecting TGZ...');
   const outputDir = path.join(OUTPUT_DIR, 'web');
@@ -110,7 +129,7 @@ function postBuildWeb() {
 const platform = process.argv[2];
 if (!platform) {
   console.error('Usage: node scripts/post-build.js <platform>');
-  console.error('  platform: android | harmony | web');
+  console.error('  platform: android | harmony | web | ios');
   process.exit(1);
 }
 
@@ -123,6 +142,9 @@ switch (platform) {
     break;
   case 'web':
     postBuildWeb();
+    break;
+  case 'ios':
+    postBuildIos();
     break;
   default:
     console.error(`Unknown platform: ${platform}`);

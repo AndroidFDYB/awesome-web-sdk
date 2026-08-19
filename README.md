@@ -165,6 +165,16 @@ mp_sdk/
 │           └── emitter/            # └ 跨 WebView 事件路由模块
 │               └── EventRouter.ets
 │
+├── ios/                            # iOS SDK 工程
+│   └── ios_web_library/            # iOS SDK 模块（Objective-C → CocoaPods 源码 pod）
+│       ├── Bridge/                 # JSBridge 通信核心
+│       ├── AppLink/                # AppLink Scheme 跳转模块
+│       ├── Emitter/                # 跨 WebView 事件路由模块
+│       ├── Components/             # WebView 容器组件
+│       ├── Generated/              # Proto codegen 生成产物
+│       ├── Resources/              # 注入脚本（bridge.js）
+│       └── ios-web-library.podspec # CocoaPods 发布配置
+│
 ├── vue-web-sdk/                    # 前端 SDK（TypeScript → TGZ）
 │   └── src/
 │       ├── bridge.ts               # 核心：平台检测 + 双协议适配
@@ -198,6 +208,8 @@ mp_sdk/
 | Gradle | 9.2.1（Wrapper 自带） |
 | DevEco Studio | 最新版（鸿蒙构建需要） |
 | Android Studio | 最新版（Android 开发） |
+| Xcode | ≥ 14（iOS 构建需要，macOS） |
+| CocoaPods | ≥ 1.10（可选，iOS 编译验证） |
 
 ### 安装依赖
 
@@ -217,6 +229,7 @@ npm run build:all
 output/
 ├── android/and_web_library-release.aar    # Android SDK
 ├── harmony/hm_web_library.har            # 鸿蒙 SDK
+├── ios/ios_web_library-1.0.0.zip         # iOS SDK（CocoaPods 源码 pod）
 └── web/mp-sdk-bridge-1.0.0.tgz           # 前端 SDK
 ```
 
@@ -226,6 +239,7 @@ output/
 npm run build:proto       # 构建共享 Proto 解析器
 npm run build:android     # 仅 Android
 npm run build:harmony     # 仅鸿蒙（需 DEVECO_HOME 环境变量）
+npm run build:ios         # 仅 iOS（proto codegen + zip 打包）
 npm run build:web         # 仅前端 SDK
 ```
 
@@ -286,13 +300,72 @@ Web({ src: url, controller: controller })
   .javaScriptProxy({ object: dsBridgeProxy, name: '_dsbridge', ... })
 ```
 
+### iOS SDK
+
+```objc
+#import <MPWebLibrary.h>
+
+@interface LoanViewController () <MPAppLinkActionDelegate>
+@property (nonatomic, strong) MPBridgeWebViewController *webVC;
+@property (nonatomic, strong) MPJSBridgeManager *bridgeManager;
+@property (nonatomic, strong) MPDataSyncHelper *dataSyncHelper;
+@property (nonatomic, strong) MPAppLinkHandler *appLinkHandler;
+@end
+
+@implementation LoanViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    // 1. 创建 WebView 容器（自动注入 bridge.js + 追加 platform=ios）
+    self.webVC = [[MPBridgeWebViewController alloc] initWithUrl:@"https://your-page.com"];
+
+    // 2. 桥接管理器 + 数据同步
+    self.bridgeManager = [[MPJSBridgeManager alloc] initWithWebView:self.webVC.webView];
+    self.dataSyncHelper = [[MPDataSyncHelper alloc] initWithBridgeManager:self.bridgeManager
+                                                         requiredChannels:@[MPDataSyncChannelUserInfo]];
+    [self.dataSyncHelper setUserInfo:@"{\"uid\":\"123\",\"ticket\":\"abc\"}"];
+
+    // 3. AppLink 跳转（SDK 强制 .overFullScreen，delegate 负责创建和展示）
+    self.appLinkHandler = [[MPAppLinkHandler alloc] initWithBridgeManager:self.bridgeManager
+                                                                 delegate:self
+                                                                    debug:YES];
+}
+
+#pragma mark - MPAppLinkActionDelegate
+
+- (UIViewController *)createViewControllerForPage:(MPAppLinkParams *)params {
+    // 创建 VC（SDK 会自动设置 .overFullScreen + .crossDissolve 用于透明弹窗）
+    if ([MPAppLinkParams isTransparentPage:params]) {
+        return [[TransparentPopupVC alloc] initWithURL:params.url];
+    }
+    return [self pageForName:params.pageName];
+}
+
+- (void)presentConfiguredViewController:(UIViewController *)vc
+                               animated:(BOOL)animated
+                             completion:(void (^)(void))completion {
+    // 展示 VC（透明弹窗时 SDK 已设置 .overFullScreen，直接 present）
+    if (vc.modalPresentationStyle == UIModalPresentationOverFullScreen) {
+        [self presentViewController:vc animated:animated completion:completion];
+    } else {
+        [self.navigationController pushViewController:vc animated:animated];
+    }
+}
+
+- (void)handleAction:(NSString *)actionScheme {
+    // 根容器处理 sk://action=...（回首页 + 打开页面）
+}
+
+@end
+```
+
 ---
 
 ## 数据同步流程
 
 ```
 1. Native 页面创建 WebView + DataSyncHelper，设置业务数据
-2. WebView 加载页面（URL 自动追加 ?platform=android|harmony）
+2. WebView 加载页面（URL 自动追加 ?platform=android|harmony|ios）
 3. 前端 SDK 自动检测平台，初始化 Bridge 连接
 4. 前端发起 HTTP 请求 → 装饰器标记所需通道 → 拦截器阻塞请求
 5. Native 页面加载完成 → DataSyncHelper 推送数据 → JSBridge callHandler
@@ -395,8 +468,9 @@ eventRouter.onHostEvent((event: string, data: string) => {
    - Android: `@NeedsOrderInfo` + `helper.setOrderInfo(data)`
    - Vue: `@waitOrderInfoSync` + `OrderInfo` 接口
    - 鸿蒙: `DataSyncChannel.ORDER_INFO` + `helper.setOrderInfo(data)`
+   - iOS: `MPDataSyncChannelOrderInfo` + `[helper setOrderInfo:data]`
 
-> **无需修改任何 SDK 源码**，三端代码全自动生成。
+> **无需修改任何 SDK 源码**，四端代码全自动生成。
 
 ---
 
@@ -406,6 +480,7 @@ eventRouter.onHostEvent((event: string, data: string) => {
 |------|------|----------|
 | Android | Kotlin + KSP + JsBridge | AGP 9.0.1, Gradle 9.2.1, Kotlin 2.2.10 |
 | HarmonyOS | ArkTS + hvigor | DevEco Studio 内置 |
+| iOS | Objective-C + WKWebView | Xcode 14+, iOS 12.0+, CocoaPods |
 | Web SDK | TypeScript + Vite | Vite 5.4, TS 5.6 |
 | Codegen | Protocol Buffers (Schema) | proto3, 运行时 JSON 传输 |
 | 共享解析器 | TypeScript (CommonJS) | `@mp-sdk/proto-codegen` |
@@ -441,6 +516,19 @@ android.sourceset.disallowProvider=false
 # 环境变量
 export DEVECO_HOME=/path/to/DevEcoStudio
 export HOS_SDK_HOME=/path/to/HarmonyOS-SDK
+```
+
+### iOS
+
+```bash
+# macOS 环境
+xcode-select --install                    # 安装 Xcode 命令行工具
+pod repo update                           # 更新 CocoaPods 仓库索引（可选）
+
+# 集成方式
+pod 'ios_web_library', :path => 'ios_web_library'   # 本地源码接入
+# 或
+pod repo push <repo> ios-web-library.podspec          # 推送私有仓库
 ```
 
 ### 通用
