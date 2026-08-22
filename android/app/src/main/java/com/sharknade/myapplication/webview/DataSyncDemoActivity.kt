@@ -14,9 +14,14 @@ import com.sharknade.and_web_library.MPBridgeConfig
 import com.sharknade.and_web_library.MPBridgeWebView
 import com.sharknade.and_web_library.MPDataSyncHelper
 import com.sharknade.and_web_library.NeedsUserInfo
+import com.sharknade.and_web_library.NeedsLeadInfo
 import com.sharknade.and_web_library.NeedsLoanInfo
 import com.sharknade.and_web_library.SyncState
+import com.sharknade.and_web_library.UserInfo
+import com.sharknade.and_web_library.LoanInfo
+import com.sharknade.and_web_library.LeadInfo
 import com.sharknade.and_web_library.generated.DataSyncBindings
+import com.sharknade.and_web_library.setLeadInfo
 import com.sharknade.and_web_library.setLoanInfo
 import com.sharknade.and_web_library.setUserInfo
 
@@ -37,6 +42,7 @@ import com.sharknade.and_web_library.setUserInfo
  */
 @NeedsUserInfo
 @NeedsLoanInfo
+@NeedsLeadInfo
 class DataSyncDemoActivity : AppCompatActivity() {
 
     companion object {
@@ -129,7 +135,9 @@ class DataSyncDemoActivity : AppCompatActivity() {
         // 运行时直接查表获取所需通道，无反射
         val channels = DataSyncBindings.getChannels(this.javaClass.name)
         dataSyncHelper = MPDataSyncHelper.create(webView, channels)
-
+        // 类型安全的 setter：接受 proto 生成的 data class 对象
+        dataSyncHelper.setLoanInfo(LoanInfo(orderId = "test", amount = 0, period = 0, rate = 0.0, status = ""))
+        dataSyncHelper.setLeadInfo(LeadInfo(investorId = "test", applyId = "", orderId = "", channelSource = "", createTime = ""))
         // 打印 KSP 注入结果
         Log.i(TAG, "=== DataSyncHelper 验证（组合模式 + KSP） ===")
         Log.i(TAG, "Activity 类: ${this.javaClass.simpleName}")
@@ -147,17 +155,20 @@ class DataSyncDemoActivity : AppCompatActivity() {
         appendStatus("\n--- 场景A ---")
 
         // 1. 设置业务数据（此时页面尚未加载）
-        val userInfoJson = """{"uid":"user_001","ticket":"ticket_abc123"}"""
-        val loanInfoJson = """{"loanId":"L20240001","amount":50000,"term":12}"""
+        val userInfo = UserInfo(uid = "user_001", ticket = "ticket_abc123")
+        val loanInfo = LoanInfo(orderId = "L20240001", amount = 50000, period = 12, rate = 0.0, status = "active")
+        val leadInfo = LeadInfo(investorId = "INV20240001", applyId = "APP20240315001", orderId = "ORD20240315001", channelSource = "douyin_ad", createTime = "2024-03-15 10:30:00")
 
-        dataSyncHelper.setUserInfo(userInfoJson)
-        dataSyncHelper.setLoanInfo(loanInfoJson)
+        dataSyncHelper.setUserInfo(userInfo)
+        dataSyncHelper.setLoanInfo(loanInfo)
+        dataSyncHelper.setLeadInfo(leadInfo)
 
-        Log.i(TAG, "setUserInfo: $userInfoJson")
-        Log.i(TAG, "setLoanInfo: $loanInfoJson")
+        Log.i(TAG, "setUserInfo: $userInfo")
+        Log.i(TAG, "setLoanInfo: $loanInfo")
+        Log.i(TAG, "setLeadInfo: $leadInfo")
         Log.i(TAG, "hasData(userInfo): ${dataSyncHelper.hasData("userInfo")}")
         Log.i(TAG, "isDataSynced(userInfo): ${dataSyncHelper.isDataSynced("userInfo")}")
-        appendStatus("已设置 userInfo + loanInfo（页面未加载）")
+        appendStatus("已设置 userInfo + loanInfo + leadInfo（页面未加载）")
 
         // 2. 加载页面 → 自动追加 ?platform=android
         //    页面加载完成后 notifyPageLoaded → pushPendingData
@@ -181,15 +192,15 @@ class DataSyncDemoActivity : AppCompatActivity() {
 
         // 3. 延迟 3 秒后设置数据（模拟异步获取业务数据）
         webView.postDelayed({
-            val userInfoJson = """{"uid":"user_002","ticket":"ticket_xyz789"}"""
-            val loanInfoJson = """{"loanId":"L20240002","amount":100000,"term":24}"""
+            val userInfo = UserInfo(uid = "user_002", ticket = "ticket_xyz789")
+            val loanInfo = LoanInfo(orderId = "L20240002", amount = 100000, period = 24, rate = 0.0, status = "pending")
 
             Log.i(TAG, "延迟设置数据...")
-            dataSyncHelper.setUserInfo(userInfoJson)
-            dataSyncHelper.setLoanInfo(loanInfoJson)
+            dataSyncHelper.setUserInfo(userInfo)
+            dataSyncHelper.setLoanInfo(loanInfo)
 
-            Log.i(TAG, "setUserInfo: $userInfoJson")
-            Log.i(TAG, "setLoanInfo: $loanInfoJson")
+            Log.i(TAG, "setUserInfo: $userInfo")
+            Log.i(TAG, "setLoanInfo: $loanInfo")
 
             // setData 时 syncState=LOADED → 立即触发 pushPendingData
             val state = dataSyncHelper.getSyncState()

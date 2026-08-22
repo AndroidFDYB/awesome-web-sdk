@@ -17,6 +17,8 @@ import com.sharknade.and_web_library.MPDataSyncHelper
 import com.sharknade.and_web_library.NeedsUserInfo
 import com.sharknade.and_web_library.NeedsVipInfo
 import com.sharknade.and_web_library.SyncState
+import com.sharknade.and_web_library.UserInfo
+import com.sharknade.and_web_library.VipInfo
 import com.sharknade.and_web_library.applink.AppLinkHandler
 import com.sharknade.and_web_library.applink.AppLinkNavigationDelegate
 import com.sharknade.and_web_library.applink.AppLinkParams
@@ -132,9 +134,9 @@ class WebViewForVipActivity : AppCompatActivity() {
         val channels = DataSyncBindings.getChannels(this.javaClass.name)
         dataSyncHelper = MPDataSyncHelper.create(webView, channels)
 
-        // 预设业务数据
-        dataSyncHelper.setUserInfo("""{"uid":"vip_user_001","ticket":"vip_ticket_abc","nickname":"VIP会员","avatar":"https://example.com/avatar.png","level":5}""")
-        dataSyncHelper.setVipInfo("""{"vipId":"VIP20240001","vipLevel":3,"expireDate":"2025-12-31","privileges":["免广告","专属客服","积分加速"]}""")
+        // 预设业务数据（类型安全的 data class 对象）
+        dataSyncHelper.setUserInfo(UserInfo(uid = "vip_user_001", ticket = "vip_ticket_abc", nickname = "VIP会员", avatar = "https://example.com/avatar.png", level = 5))
+        dataSyncHelper.setVipInfo(VipInfo(vipId = "VIP20240001", vipLevel = 3, expireDate = "2025-12-31", privileges = listOf("免广告", "专属客服", "积分加速")))
 
         // ===== AppLink 初始化 =====
         appLinkHandler = AppLinkHandler(webView)

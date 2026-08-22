@@ -8,4 +8,5 @@ export class DataSyncChannel {
   static readonly USER_INFO: string = 'userInfo';
   static readonly LOAN_INFO: string = 'loanInfo';
   static readonly VIP_INFO: string = 'vipInfo';
+  static readonly LEAD_INFO: string = 'leadInfo';
 }

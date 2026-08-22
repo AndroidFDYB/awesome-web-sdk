@@ -14,14 +14,17 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface MPDataSyncHelper (Generated)
 
-/** 设置 UserInfo（用户信息）数据 */
+/** 设置 UserInfo 数据 */
 - (void)setUserInfo:(NSString *)data;
 
-/** 设置 LoanInfo（借款信息）数据 */
+/** 设置 LoanInfo 数据 */
 - (void)setLoanInfo:(NSString *)data;
 
-/** 设置 VipInfo（会员信息）数据 */
+/** 设置 VipInfo 数据 */
 - (void)setVipInfo:(NSString *)data;
+
+/** 设置 LeadInfo 数据 */
+- (void)setLeadInfo:(NSString *)data;
 
 @end
 

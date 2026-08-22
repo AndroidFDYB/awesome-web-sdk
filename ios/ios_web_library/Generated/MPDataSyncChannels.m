@@ -5,3 +5,4 @@
 NSString * const MPDataSyncChannelUserInfo = @"userInfo";
 NSString * const MPDataSyncChannelLoanInfo = @"loanInfo";
 NSString * const MPDataSyncChannelVipInfo = @"vipInfo";
+NSString * const MPDataSyncChannelLeadInfo = @"leadInfo";

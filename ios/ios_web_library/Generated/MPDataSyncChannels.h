@@ -10,13 +10,16 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/** 用户信息通道 */
+/** - 字段编号从 1 开始连续递增 */
 FOUNDATION_EXPORT NSString * const MPDataSyncChannelUserInfo;
 
-/** 借款信息通道 */
+/** LoanInfo 数据通道 */
 FOUNDATION_EXPORT NSString * const MPDataSyncChannelLoanInfo;
 
-/** 会员信息通道 */
+/** VipInfo 数据通道 */
 FOUNDATION_EXPORT NSString * const MPDataSyncChannelVipInfo;
+
+/** LeadInfo 数据通道 */
+FOUNDATION_EXPORT NSString * const MPDataSyncChannelLeadInfo;
 
 NS_ASSUME_NONNULL_END

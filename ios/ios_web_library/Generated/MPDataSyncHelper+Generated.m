@@ -17,4 +17,8 @@
     [self setData:MPDataSyncChannelVipInfo data:data];
 }
 
+- (void)setLeadInfo:(NSString *)data {
+    [self setData:MPDataSyncChannelLeadInfo data:data];
+}
+
 @end

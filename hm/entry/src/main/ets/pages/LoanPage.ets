@@ -1,16 +1,13 @@
 /**
- * LoanPage — 借款页面数据同步验证（原生 Web + 工具注入）
+ * LoanPage — 借款页面数据同步验证（装饰器 + create 工厂）
  *
- * 验证鸿蒙端 DataSyncHelper 的完整流程：
- * 1. 创建 DataSyncHelper 声明所需通道 [USER_INFO, LOAN_INFO]
- * 2. aboutToAppear 中设置业务数据（页面加载前）
- * 3. 使用原生 Web 组件 + BridgeUtils 工具注入桥接逻辑
+ * 验证鸿蒙端装饰器方式的数据同步：
+ * 1. @NeedsDataSync 装饰器声明所需通道
+ * 2. DataSyncHelper.create() 自动从静态绑定 / 运行时注册表获取通道
+ * 3. aboutToAppear 中设置业务数据
  * 4. onPageEnd 时通知 DataSyncHelper 触发数据推送
- * 5. DataSyncHelper.pushPendingData → callJs("syncUserInfo"/"syncLoanInfo")
  *
- * 与旧版差异：
- * - 不使用 MPBridgeWeb 封装组件，直接使用原生 Web 组件
- * - 通过 DsBridgeProxy + BridgeUtils 工具注入桥接逻辑，侵入性更低
+ * 对标 Android 的 @NeedsUserInfo + KSP 方案。
  */
 
 import { webview } from '@kit.ArkWeb';
@@ -20,18 +17,16 @@ import {
   DataSyncHelper,
   DataSyncChannel,
   DsBridgeProxy,
-  BridgeUtils
+  BridgeUtils,
+  NeedsDataSync
 } from 'hm_web_library';
 
 @Entry
 @Component
+@NeedsDataSync([DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO])
 struct LoanPage {
   private bridgeManager: JSBridgeManager = new JSBridgeManager(true);
-  private dataSyncHelper: DataSyncHelper = new DataSyncHelper(
-    this.bridgeManager,
-    [DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO],
-    true
-  );
+  private dataSyncHelper: DataSyncHelper = DataSyncHelper.create(this.bridgeManager, LoanPage, true);
   private dsBridgeProxy: DsBridgeProxy = new DsBridgeProxy(this.bridgeManager);
   @State controller: webview.WebviewController = new webview.WebviewController();
   @State statusText: string = '准备中...';

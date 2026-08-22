@@ -46,4 +46,9 @@ UserInfo → userInfo → syncUserInfo
   setVipInfo(data: string): void {
     this.setData(DataSyncChannel.VIP_INFO, data);
   }
+
+  /** 设置 LeadInfo 数据 */
+  setLeadInfo(data: string): void {
+    this.setData(DataSyncChannel.LEAD_INFO, data);
+  }
 }

@@ -3,44 +3,38 @@
  *
  * 鸿蒙端业务数据同步管理器，解决 WebView 中 Native → Web 大数据量传递的时序问题。
  *
- * 与 Android 端 MPDataSyncHelper 功能对等，但因鸿蒙 AOP 能力较差，
- * 不使用注解方式，而是由调用方直接声明所需数据通道。
+ * 与 Android 端 MPDataSyncHelper 功能对等，采用装饰器 + 静态绑定方式声明通道，
+ * 对标 Android KSP 注解方案。
  *
  * 数据推送时机：
  * 1. 页面已加载 + 数据已就绪 → 立即推送
  * 2. 页面已加载 + 数据未就绪 → 等待数据到达后推送
- * 3. 页面未加载 + 数据已就绪 → 等待页面加载完成后推送
+ * 3. 页面未加载 + 数据已就绪 → 等待页面加载结束后推送
  *
- * 使用方式：
+ * 使用方式（装饰器 + create 工厂，推荐）：
  * ```typescript
- * import { DataSyncHelper, DataSyncChannel, JSBridgeManager } from 'hm_web_library';
+ * import { NeedsDataSync, DataSyncHelper, DataSyncChannel, JSBridgeManager } from 'hm_web_library';
  *
  * @Entry
  * @Component
+ * @NeedsDataSync([DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO])
  * struct LoanPage {
  *   private bridgeManager: JSBridgeManager = new JSBridgeManager(true);
- *   private dataSyncHelper: DataSyncHelper = new DataSyncHelper(
- *     this.bridgeManager,
- *     [DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO],
- *     true
- *   );
- *
- *   build() {
- *     MPBridgeWeb({
- *       bridgeManager: this.bridgeManager,
- *       url: 'https://example.com/loan',
- *       debug: true,
- *       dataSyncHelper: this.dataSyncHelper,
- *       controller: this.controller
- *     })
- *   }
+ *   private dataSyncHelper: DataSyncHelper = DataSyncHelper.create(this.bridgeManager, LoanPage, true);
  *
  *   aboutToAppear() {
- *     // 设置业务数据（可在页面加载前或后）
- *     this.dataSyncHelper.setUserInfo('{"uid":"123","ticket":"abc"}');
- *     this.dataSyncHelper.setLoanInfo('{"loanId":"L001","amount":50000}');
+ *     this.dataSyncHelper.setUserInfo('{"uid":"123"}');
  *   }
  * }
+ * ```
+ *
+ * 使用方式（手动传参，兼容旧代码）：
+ * ```typescript
+ * private dataSyncHelper = new DataSyncHelper(
+ *   this.bridgeManager,
+ *   [DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO],
+ *   true
+ * );
  * ```
  */
 
@@ -48,6 +42,8 @@ import { JSBridgeManager } from './JSBridge';
 import { DataSyncChannel } from '../generated/DataSyncChannels';
 import { DataSyncMethod } from '../generated/DataSyncMethods';
 import { DataSyncSetters } from '../generated/DataSyncSetters';
+import { DataSyncBindings } from '../generated/DataSyncBindings';
+import { DecoratorRegistry } from './DataSyncDecorators';
 
 // ========================
 // 同步状态枚举
@@ -92,8 +88,8 @@ class ChannelState {
  * 管理页面加载状态和各通道数据推送状态，
  * 在「页面加载完成」+「数据就绪」时自动通过 JSBridge 推送数据到前端。
  *
- * 因鸿蒙 AOP 能力较差，不使用注解方式，
- * 调用方在构造时直接传入所需的数据通道列表。
+ * 推荐使用 @NeedsDataSync 装饰器 + DataSyncHelper.create() 工厂方法，
+ * 对标 Android KSP 注解方案。
  */
 export class DataSyncHelper extends DataSyncSetters {
   /** JSBridge 管理器，用于调用 JS 方法推送数据 */
@@ -112,7 +108,45 @@ export class DataSyncHelper extends DataSyncSetters {
   private debug: boolean = false;
 
   /**
+   * 静态工厂方法：通过装饰器/静态绑定自动发现通道
+   *
+   * 查表顺序：
+   * 1. DataSyncBindings（编译期 hvigor 插件生成的静态绑定）
+   * 2. DecoratorRegistry（运行时装饰器注册表）
+   * 3. 显式传入的 requiredChannels
+   *
+   * @param bridgeManager JSBridge 管理器实例
+   * @param pageClass 页面/组件类（如 LoanPage），用于查表
+   * @param debug 是否开启调试日志
+   *
+   * @example
+   * ```typescript
+   * @NeedsDataSync([DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO])
+   * struct LoanPage {
+   *   private dataSyncHelper = DataSyncHelper.create(this.bridgeManager, LoanPage, true);
+   * }
+   * ```
+   */
+  static create(
+    bridgeManager: JSBridgeManager,
+    pageClass: Function,
+    debug: boolean = false
+  ): DataSyncHelper {
+    const className: string = pageClass.name;
+    // 1. 优先查静态绑定（hvigor 插件生成）
+    let channels: string[] = DataSyncBindings.getChannels(className);
+    // 2. 回退到运行时装饰器注册表
+    if (channels.length === 0) {
+      channels = DecoratorRegistry.getChannels(className);
+    }
+    return new DataSyncHelper(bridgeManager, channels, debug);
+  }
+
+  /**
    * 构造函数
+   *
+   * 推荐优先使用 DataSyncHelper.create() 工厂方法，
+   * 仅当不需要装饰器/静态绑定时直接使用构造函数。
    *
    * @param bridgeManager JSBridge 管理器实例
    * @param requiredChannels 所需数据通道列表（如 [DataSyncChannel.USER_INFO, DataSyncChannel.LOAN_INFO]）

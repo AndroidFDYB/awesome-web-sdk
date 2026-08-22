@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package mp.sdk;
+
+// 线索信息通道（集成方自定义扩展）
+// Android: @NeedsLeadInfo    Vue: @waitLeadInfoSync    Method: syncLeadInfo
+message LeadInfo {
+  string investorId = 1;
+  string applyId = 2;
+  string orderId = 3;
+  string channelSource = 4;
+  string createTime = 5;
+}

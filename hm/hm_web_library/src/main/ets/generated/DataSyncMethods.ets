@@ -10,6 +10,7 @@ export class DataSyncMethod {
   static readonly SYNC_USER_INFO: string = 'syncUserInfo';
   static readonly SYNC_LOAN_INFO: string = 'syncLoanInfo';
   static readonly SYNC_VIP_INFO: string = 'syncVipInfo';
+  static readonly SYNC_LEAD_INFO: string = 'syncLeadInfo';
 
   /**
    * 根据通道名获取对应的 JSBridge 方法名
@@ -23,6 +24,8 @@ export class DataSyncMethod {
         return DataSyncMethod.SYNC_LOAN_INFO;
       case DataSyncChannel.VIP_INFO:
         return DataSyncMethod.SYNC_VIP_INFO;
+      case DataSyncChannel.LEAD_INFO:
+        return DataSyncMethod.SYNC_LEAD_INFO;
       default: {
         const capitalized = channel.charAt(0).toUpperCase() + channel.slice(1);
         return `sync${capitalized}`;

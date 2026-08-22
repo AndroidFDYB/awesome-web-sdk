@@ -65,10 +65,11 @@ fun main(args: Array<String>) {
     File(outDir, GeneratedFileNames.ANNOTATIONS).writeText(generated.annotations)
     File(outDir, GeneratedFileNames.CHANNELS).writeText(generated.channels)
     File(outDir, GeneratedFileNames.METHODS).writeText(generated.methods)
+    File(outDir, GeneratedFileNames.DATA_CLASSES).writeText(generated.dataClasses)
     File(outDir, GeneratedFileNames.SETTERS).writeText(generated.setters)
 
     // 写入 JSON 元数据
     File(outDir, GeneratedFileNames.MAPPINGS).writeText(generated.mappingsJson)
 
-    println("[ProtoCodegen] Generated 5 files in ${outDir.absolutePath}")
+    println("[ProtoCodegen] Generated 6 files in ${outDir.absolutePath}")
 }

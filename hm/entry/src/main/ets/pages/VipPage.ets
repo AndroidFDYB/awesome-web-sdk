@@ -1,12 +1,13 @@
 /**
- * VipPage — 会员页面 AppLink + DataSync 集成验证
+ * VipPage — 会员页面 AppLink + DataSync 集成验证（装饰器 + create 工厂）
  *
- * 验证鸿蒙端完整的 AppLink 跳转 + 数据同步流程：
+ * 验证鸿蒙端完整的 AppLink 跳转 + 装饰器数据同步流程：
  *
  * DataSync：
- * 1. DataSyncHelper 声明所需通道 [USER_INFO, VIP_INFO]
- * 2. aboutToAppear 中设置用户信息和会员信息
- * 3. onPageEnd 时通知 DataSyncHelper 触发数据推送
+ * 1. @NeedsDataSync 装饰器声明所需通道 [USER_INFO, VIP_INFO]
+ * 2. DataSyncHelper.create() 自动获取通道列表
+ * 3. aboutToAppear 中设置用户信息和会员信息
+ * 4. onPageEnd 时通知 DataSyncHelper 触发数据推送
  *
  * AppLink：
  * 1. AppLinkHandler 注册 jump2Native，前端 H5 可通过 scheme 触发原生跳转
@@ -14,11 +15,6 @@
  *    - openPage: 透明弹窗用 @CustomDialog（registerClose 注册关闭回调）
  *    - handleAction: backHome 时 router 返回首页
  * 3. 弹窗引用管理采用回调注册表模式，SDK 持有 closeFn 闭包
- *
- * 弹窗引用管理：
- * ArkTS 无 WeakReference/SoftReference，字符串 ID 无法实际控制弹窗关闭。
- * 因此 openPage 传入 registerClose 回调，弹窗创建后注册 () => ctrl.close()。
- * SDK 链表存储闭包，backHome 时逐一调用 closeFn 关闭弹窗。
  */
 
 import { webview } from '@kit.ArkWeb';
@@ -32,7 +28,8 @@ import {
   AppLinkHandler,
   AppLinkActionDelegate,
   AppLinkParams,
-  PAGE_TRANSPARENT
+  PAGE_TRANSPARENT,
+  NeedsDataSync
 } from 'hm_web_library';
 import { TransparentPopupDialog } from '../components/TransparentPopupDialog';
 
@@ -67,13 +64,10 @@ class VipPageAppLinkDelegate implements AppLinkActionDelegate {
 
 @Entry
 @Component
+@NeedsDataSync([DataSyncChannel.USER_INFO, DataSyncChannel.VIP_INFO])
 struct VipPage {
   private bridgeManager: JSBridgeManager = new JSBridgeManager(true);
-  private dataSyncHelper: DataSyncHelper = new DataSyncHelper(
-    this.bridgeManager,
-    [DataSyncChannel.USER_INFO, DataSyncChannel.VIP_INFO],
-    true
-  );
+  private dataSyncHelper: DataSyncHelper = DataSyncHelper.create(this.bridgeManager, VipPage, true);
   private dsBridgeProxy: DsBridgeProxy = new DsBridgeProxy(this.bridgeManager);
   private appLinkHandler: AppLinkHandler = new AppLinkHandler(
     this.bridgeManager,

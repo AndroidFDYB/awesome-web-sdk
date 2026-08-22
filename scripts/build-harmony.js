@@ -52,6 +52,13 @@ try {
     stdio: 'inherit',
   });
 
+  // 扫描装饰器生成 DataSyncBindings.ets（对标 Android KSP）
+  console.log('[Build] Scanning decorators for DataSyncBindings...');
+  execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'scan-decorators-harmony.js')], {
+    cwd: ROOT,
+    stdio: 'inherit',
+  });
+
   // 使用 DevEco Studio 的 node 执行 hvigorw.js
   // 构建 hm_web_library 模块的 HAR 产物
   const args = [

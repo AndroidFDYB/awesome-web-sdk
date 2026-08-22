@@ -11,6 +11,7 @@ data class GeneratedFiles(
     val annotations: String,
     val channels: String,
     val methods: String,
+    val dataClasses: String,
     val setters: String,
     val mappingsJson: String
 )
@@ -20,6 +21,7 @@ object GeneratedFileNames {
     const val ANNOTATIONS = "MPDataSyncAnnotations.kt"
     const val CHANNELS = "DataSyncChannels.kt"
     const val METHODS = "DataSyncMethods.kt"
+    const val DATA_CLASSES = "MPDataSyncModels.kt"
     const val SETTERS = "MPDataSyncHelperSetters.kt"
     const val MAPPINGS = "channel-mappings.json"
 }
@@ -127,26 +129,79 @@ fun generateMethods(messages: List<ProtoMessage>): String = buildString {
 }
 
 /**
+ * 生成数据模型 data class
+ *
+ * 从 proto message 字段定义生成 Kotlin data class。
+ * 字段类型由 ProtoScalarType.kotlinType 映射（string→String, int32→Int 等）。
+ */
+fun generateDataClasses(messages: List<ProtoMessage>): String = buildString {
+    appendLine("// AUTO-GENERATED from proto. DO NOT EDIT.")
+    appendLine("package $PACKAGE")
+    appendLine()
+    for (msg in messages) {
+        val comment = msg.comment ?: "${msg.name} 数据模型"
+        appendLine("/** $comment */")
+        if (msg.fields.isEmpty()) {
+            appendLine("data class ${msg.name}(val _placeholder: String = \"\")")
+        } else {
+            appendLine("data class ${msg.name}(")
+            msg.fields.forEachIndexed { index, field ->
+                val kotlinType = if (field.repeated) "List<${field.type.kotlinType}>" else field.type.kotlinType
+                val default = when {
+                    field.repeated -> "emptyList()"
+                    field.type.kotlinType == "String" -> "\"\""
+                    field.type.kotlinType == "ByteArray" -> "ByteArray(0)"
+                    field.type.kotlinType == "Double" -> "0.0"
+                    field.type.kotlinType == "Float" -> "0.0f"
+                    field.type.kotlinType == "Long" -> "0L"
+                    else -> "0"
+                }
+                val comma = if (index < msg.fields.size - 1) "," else ""
+                appendLine("    val ${field.name}: $kotlinType = $default$comma")
+            }
+            appendLine(")")
+        }
+        appendLine()
+    }
+}
+
+/** Proto 标量类型 → JSON 序列化表达式 */
+private fun jsonPutExpr(fieldName: String, type: ProtoScalarType, repeated: Boolean): String {
+    if (repeated) {
+        return "json.put(\"$fieldName\", org.json.JSONArray(data.$fieldName))"
+    }
+    return "json.put(\"$fieldName\", data.$fieldName)"
+}
+
+/**
  * 生成 Helper setter 扩展函数源码
  *
- * 生成 fun MPDataSyncHelper.setUserInfo(data: String) 等便捷方法。
- * 这些是扩展函数，添加到 MPDataSyncHelper 上，不修改原始类。
+ * 生成 fun MPDataSyncHelper.setUserInfo(data: UserInfo) 等类型安全的便捷方法。
+ * 接受 proto 生成的 data class 对象，内部自动序列化为 JSON 后推送。
  */
 fun generateSetters(messages: List<ProtoMessage>): String = buildString {
     appendLine("// AUTO-GENERATED from proto. DO NOT EDIT.")
     appendLine("package $PACKAGE")
     appendLine()
+    appendLine("import org.json.JSONArray")
+    appendLine("import org.json.JSONObject")
+    appendLine()
     appendLine("/**")
     appendLine(" * MPDataSyncHelper 的 setter 扩展函数")
-    appendLine(" * 由 proto codegen 自动生成")
+    appendLine(" * 由 proto codegen 自动生成，接受类型安全的 data class 对象")
     appendLine(" */")
     appendLine()
     for (msg in messages) {
         val setterName = messageToSetterName(msg.name)
-        val channel = messageToChannel(msg.name)
         val comment = msg.comment ?: "设置 ${msg.name} 数据"
         appendLine("/** $comment */")
-        appendLine("fun MPDataSyncHelper.$setterName(data: String) = setData(DataSyncChannel.${messageToConstantName(msg.name)}, data)")
+        appendLine("fun MPDataSyncHelper.$setterName(data: ${msg.name}) {")
+        appendLine("    val json = JSONObject()")
+        for (field in msg.fields) {
+            appendLine("    ${jsonPutExpr(field.name, field.type, field.repeated)}")
+        }
+        appendLine("    setData(DataSyncChannel.${messageToConstantName(msg.name)}, json.toString())")
+        appendLine("}")
         appendLine()
     }
 }
@@ -182,6 +237,7 @@ fun generateAll(protoFile: ProtoFile): GeneratedFiles {
         annotations = generateAnnotations(messages),
         channels = generateChannels(messages),
         methods = generateMethods(messages),
+        dataClasses = generateDataClasses(messages),
         setters = generateSetters(messages),
         mappingsJson = generateMappingsJson(messages)
     )

@@ -6,6 +6,7 @@
 NSString * const MPDataSyncMethodSyncUserInfo = @"syncUserInfo";
 NSString * const MPDataSyncMethodSyncLoanInfo = @"syncLoanInfo";
 NSString * const MPDataSyncMethodSyncVipInfo = @"syncVipInfo";
+NSString * const MPDataSyncMethodSyncLeadInfo = @"syncLeadInfo";
 
 @implementation MPDataSyncMethods
 
@@ -18,6 +19,9 @@ NSString * const MPDataSyncMethodSyncVipInfo = @"syncVipInfo";
     }
     if ([channel isEqualToString:MPDataSyncChannelVipInfo]) {
         return MPDataSyncMethodSyncVipInfo;
+    }
+    if ([channel isEqualToString:MPDataSyncChannelLeadInfo]) {
+        return MPDataSyncMethodSyncLeadInfo;
     }
     // 自定义通道：首字母大写后拼接 "sync" 前缀
     if (channel.length > 0) {

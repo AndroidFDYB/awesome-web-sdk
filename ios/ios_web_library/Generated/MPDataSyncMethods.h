@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSString * const MPDataSyncMethodSyncUserInfo;
 FOUNDATION_EXPORT NSString * const MPDataSyncMethodSyncLoanInfo;
 FOUNDATION_EXPORT NSString * const MPDataSyncMethodSyncVipInfo;
+FOUNDATION_EXPORT NSString * const MPDataSyncMethodSyncLeadInfo;
 
 @interface MPDataSyncMethods : NSObject
 
