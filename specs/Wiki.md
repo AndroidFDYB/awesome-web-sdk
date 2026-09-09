@@ -206,6 +206,31 @@ iOS Objective-C SDK（`ios/ios_web_library/`）于 2026-08 完整落地（Bridge
 - iOS 分发形态为源码包（zip + podspec），与 AAR / HAR / TGZ 并列成为第四种产物形态
 - Windows 环境无法执行 build:ios（macOS 工具链前置），以构建链存在性核验替代；真机构建验证属后续代码变更的义务
 
+### 后续修正（2026-09，add-ci-build-pipeline）
+
+上述“macOS 环境前置”与“Windows 环境无法执行 build:ios”两项判断当时未经实跑验证，已被 CI 实证否证：`build:ios` 为纯 Node 流程（codegen + 源码完整性校验 + 打包），已在 Windows 本机与 ubuntu-latest runner 上双双构建成功。主规范「环境前置要求」相应修正为“iOS 构建 MUST NOT 依赖 macOS 工具链”；仅可选的编译验证（`pod lib lint`）需 macOS + Xcode + CocoaPods。本节上文作为历史记录保留不改。
+
+---
+
+## 2026-09 CI 自动化构建流水线（四 job 并行）
+
+### 背景
+
+代码托管至 GitHub 后，构建验证仍完全依赖开发者本机工具链：`build:all` 为串联脚本（一端失败后续全停），鸿蒙构建绑定本机 DevEco Studio 路径，产物无统一的可获取入口。
+
+### 变更（OpenSpec 变更 add-ci-build-pipeline）
+
+- 新增 `.github/workflows/build.yml`：`web` / `ios` / `android` 三个 job 各自产出制品（TGZ / zip / AAR），`harmony-codegen` 仅校验 ArkTS 生成物；四 job 互不声明 `needs`，单端失败不阻断其余端
+- Android 构建入口跨平台化：新增 `scripts/build-android.js` 按 `process.platform` 选择 wrapper，消除 `build:android` 硬编码 `gradlew.bat`（该硬编码违反 build 主规范既有的跨平台约束）；`android/gradlew` 索引模式修正为 `100755`
+- `build-ios.js` 的 `createZip` 改为“按平台排序候选工具 + 产物魔数校验”，消除 Linux 上 GNU tar 静默产出错格式归档的风险
+- 主规范 build 域：跨平台约束双向化（Windows 本地 + Linux CI）、新增「CI 自动化构建」Requirement、修正被实证否证的 iOS macOS 前置断言
+
+### 设计原则
+
+- CI 与本地执行同一 `npm run build:*` 入口，不在 workflow 内另建命令分叉
+- 降级校验须自述边界：`harmony-codegen` 的绿灯不代表 HAR 可构建
+- 防假绿优先于便利：构建前清空本端 `output/` 子目录 + `if-no-files-found: error`，因仓库内存在已入库的历史产物
+
 ---
 
 ## 历史架构决策索引
@@ -223,3 +248,5 @@ iOS Objective-C SDK（`ios/ios_web_library/`）于 2026-08 完整落地（Bridge
 | 2026-08 | Kotlin 扩展函数显式导入规范 | 2.13 |
 | 2026-08 | 集成测试验证阶段补齐（开发完成标准） | 8.5 |
 | 2026-09 | iOS 平台纳入规范体系（四端化，逆向轨追认） | 1 / 2.8 |
+| 2026-09 | CI 流水线拓扑（四 job 并行 + 鸿蒙降级校验） | 2.14 |
+| 2026-09 | 构建脚本的 CI 兼容性（跨平台双向约束） | 2.15 / 8.7 |

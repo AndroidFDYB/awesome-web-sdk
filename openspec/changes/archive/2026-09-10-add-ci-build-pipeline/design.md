@@ -123,6 +123,20 @@ job 命名：`web` / `ios` / `android` / `harmony-codegen`（末者名称即自�
 - 候选顺序——Linux：`zip -r` → `pwsh Compress-Archive` → `tar -a`；Windows / macOS：`tar -a` → `powershell.exe Compress-Archive` → `zip -r`。
 - PowerShell 候选改为单条完整命令字符串（`Compress-Archive -Path "..." -DestinationPath "..." -Force`），修正原参数传递缺陷。
 
+### 决策 9：iOS「macOS 环境前置」断言被实证否证后的修正（实施中追加）
+
+首轮 CI 中 `ios` job 在 **ubuntu-latest 上构建成功**（本机 Windows 亦早已成功），实证否证了主规范 `build/spec.md`「环境前置要求」的既有断言——原文为「iOS 构建 MUST 依赖 macOS 工具链」，且 Scenario「iOS 在非 macOS 环境构建」断言 THEN 构建**失败**并给出平台限制提示。该断言源自 `add-ios-platform` 的逆向轨追认，当时照抄 README 前置条件表而未经实跑验证。
+
+| 备选 | 取舍 |
+|------|------|
+| **A. 全面修正（选定）** | delta 追加 MODIFIED「环境前置要求」（iOS 改为 MUST NOT 依赖 macOS 工具链，Scenario 的 THEN 由「构建失败」改为「构建成功并产出源码包」，Scenario 名保留不变），并修正本 delta 内「iOS 单端构建」的 GIVEN；同步四处文档：`AGENTS.md` 红线 3、`openspec/config.yaml` 的 context、`specs/Design.md` §8.5 验证表、`README.md` 前置条件表与环境配置节 |
+| B. 只修规范不动文档 | **否**——`config.yaml` 的 context 每次 apply 都作为约束输入喂给 AI，`AGENTS.md` 红线是开发者第一入口，不修会持续传播同一错误断言 |
+| C. 改 `build-ios.js` 使非 macOS 环境主动失败以符合现有规范 | **否**——放弃已两次实证可用的跨平台产出能力，与「iOS 为 CocoaPods 源码 pod、构建无编译步骤」的设计事实相悖，且本变更的 `ios` job 将因此无法存在 |
+
+**边界保留**：与**消费侧**相关的 Xcode / CocoaPods 要求（iOS 应用集成开发、`pod lib lint` 编译验证、iOS 12.0+ 部署目标）不属被否证范围——`README.md` 技术栈表、`Design.md` §1 平台表原样保留，仅将前置条件表中的 Xcode / CocoaPods 标注为「可选，仅编译验证与集成需要」。
+
+**历史记录处置**：`specs/Wiki.md` 中 `add-ios-platform` 章节的两处历史陈述（「macOS 环境前置」「Windows 环境无法执行 build:ios」）按记录保真原则**保留原文**，另追加「后续修正」小节指向本次结论。
+
 ### Proto 通道变更影响说明
 
 本变更**不修改** `specs/proto/channels.proto`，四端生成物内容零变化。新增守门能力如下：
@@ -150,6 +164,7 @@ job 命名：`web` / `ios` / `android` / `harmony-codegen`（末者名称即自�
 - **[入库历史产物导致陈旧制品（坑 6）]** → 构建前清空 + `if-no-files-found: error` 双重保障。根本解法是把 `output/` 移出版本控制，但根目录**当前无 `.gitignore`**，且 `android/proto-codegen/build/`（Gradle 增量缓存）、`vue-web-sdk/dist/` 亦已入库——清理属既存技术债，本次不做，列入 Open Questions。
 - **[npm 11 拦住 esbuild postinstall 使 vite 构建失败（坑 7）]** → 固定 Node 22（npm 10.x）；若未来升级 Node 需同步验证 install-scripts 策略。
 - **[仓库内 Web 生成物与 `dist/` 落后于 proto 真相源]** → 实施中实测发现：入库的 `vue-web-sdk/src/data-sync/generated/*.gen.ts` 与 `dist/` 缺少 `LeadInfo` 通道（`specs/proto/custom/lead_info.proto` 已存在，Android / iOS / 鸿蒙三端生成物均已含），本次构建已重新生成。CI 每次重新生成故不受影响，但仓库存量产物需同步提交（处理方式由用户决策）。
+- **[规范断言与实证行为不一致（既存缺陷）]** → 已按决策 9 全面修正。**教训**：逆向轨追认时「照抄既有文档」不能替代实跑验证——凡涉及环境前置、平台限制的断言，必须由实际构建证据支撑，否则错误会被写入真相源并随 config.yaml 的 context 持续放大。
 
 ## Migration Plan
 

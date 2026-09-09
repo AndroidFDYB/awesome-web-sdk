@@ -3,6 +3,7 @@
 > **跨平台 JSBridge SDK 框架** — 为 Android / HarmonyOS / Web / iOS 四端提供统一的 WebView 双向通信与数据同步能力。
 
 [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20HarmonyOS%20%7C%20Web%20%7C%20iOS-blue)]()
+[![build](https://github.com/AndroidFDYB/awesome-web-sdk/actions/workflows/build.yml/badge.svg)](https://github.com/AndroidFDYB/awesome-web-sdk/actions/workflows/build.yml)
 [![License](https://img.shields.io/badge/license-Proprietary-red)]()
 
 ---
@@ -201,6 +202,7 @@ mp_sdk/
 │
 ├── vue-web/                        # 前端示例应用（Vue 3 + Vite）
 ├── scripts/                        # 跨平台构建脚本
+├── .github/workflows/build.yml     # CI 流水线（四 job 并行）
 └── output/                         # 构建产物输出
 ```
 
@@ -217,8 +219,10 @@ mp_sdk/
 | Gradle | 9.2.1（Wrapper 自带） |
 | DevEco Studio | 最新版（鸿蒙构建需要） |
 | Android Studio | 最新版（Android 开发） |
-| Xcode | ≥ 14（iOS 构建需要，macOS） |
-| CocoaPods | ≥ 1.10（可选，iOS 编译验证） |
+| Xcode | ≥ 14（**可选**，仅 iOS 侧编译验证 `pod lib lint` 与集成开发需要，macOS） |
+| CocoaPods | ≥ 1.10（**可选**，iOS 编译验证与集成） |
+
+> `npm run build:ios` 为纯 Node 流程（codegen + 源码完整性校验 + 打包），Windows / Linux / macOS 均可执行，**不需要 macOS 与 Xcode**；仅 `build:harmony` 必须本机 DevEco Studio。CI 侧固定 Node 22。
 
 ### 安装依赖
 
@@ -251,6 +255,26 @@ npm run build:harmony     # 仅鸿蒙（需 DEVECO_HOME 环境变量）
 npm run build:ios         # 仅 iOS（proto codegen + zip 打包）
 npm run build:web         # 仅前端 SDK
 ```
+
+---
+
+## CI 自动构建
+
+推送到 `main` 后，GitHub Actions 自动产出三端制品（[运行记录](https://github.com/AndroidFDYB/awesome-web-sdk/actions/workflows/build.yml)）：
+
+| Job | Runner | 执行内容 | 制品 |
+|-----|--------|----------|------|
+| `web` | ubuntu-latest | `npm ci`（根 + vue-web-sdk）→ `build:web` | `web-tgz` |
+| `ios` | ubuntu-latest | `npm ci` → `build:ios` → `unzip -t` 完整性校验 | `ios-zip` |
+| `android` | ubuntu-latest + JDK 21 | `npm ci` → Gradle 缓存 → `build:android` | `android-aar` |
+| `harmony-codegen` | ubuntu-latest | `codegen:harmony` + `scan:harmony` + 生成物非空断言 | 无 |
+
+- 四个 job 并行且**互不声明依赖**：单端失败不影响其余端制品产出
+- 制品保留 90 天，在对应运行页的 **Artifacts** 区下载；也可在 Actions 页手动触发（`workflow_dispatch`）为当前分支重跑
+
+> **鸿蒙边界说明**：`harmony-codegen` 仅校验 proto → ArkTS 生成链路（DevEco Studio / hvigor 工具链在公共 runner 不可得），**不代表 HAR 可构建**。HAR 的可构建性仍以本地 `npm run build:harmony` 为准。
+
+> **iOS 说明**：iOS SDK 以 CocoaPods 源码 pod 形式发布，构建过程为 codegen + 源码完整性校验 + 打包，**无编译步骤**，故制品在 Linux runner 产出；如需编译验证（`pod lib lint`）请在 macOS 侧自行执行。
 
 ---
 
@@ -542,7 +566,10 @@ export HOS_SDK_HOME=/path/to/HarmonyOS-SDK
 ### iOS
 
 ```bash
-# macOS 环境
+# 构建源码包：无需 macOS（纯 Node 流程，三平台均可）
+npm run build:ios                         # → output/ios/ios_web_library-1.0.0.zip
+
+# 以下仅编译验证与集成时需要（macOS）
 xcode-select --install                    # 安装 Xcode 命令行工具
 pod repo update                           # 更新 CocoaPods 仓库索引（可选）
 
@@ -554,8 +581,10 @@ pod repo push <repo> ios-web-library.podspec          # 推送私有仓库
 
 ### 通用
 
-- 构建脚本使用 Node.js，不使用 PowerShell 专有命令
-- 所有构建入口统一在根目录 `package.json` 的 npm scripts
+- 构建脚本使用 Node.js 跨平台语法，不使用 PowerShell 专有命令，也不硬编码单一操作系统的可执行入口
+- shell 脚本（如 `android/gradlew`）在 git 索引中须具备可执行位 `100755`（`git update-index --chmod=+x <path>`）
+- 所有构建入口统一在根目录 `package.json` 的 npm scripts，CI 与本地执行同一命令
+- CI 固定 Node 22（npm 11 的 install-scripts 机制会拦住 `esbuild` 的 postinstall 使 vite 构建失败）
 
 ---
 

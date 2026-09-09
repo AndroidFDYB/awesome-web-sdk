@@ -140,6 +140,23 @@ MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容�
 - **替代方案**：如需零导入，可使用 `helper.setData(DataSyncChannel.USER_INFO, data)` 通用方法（`setData` 为成员函数）
 - **设计理由**：扩展函数不修改原始类，codegen 产物与手写源码解耦，符合组合优于继承的设计原则
 
+### 2.14 CI 流水线拓扑（四 job 并行 + 鸿蒙降级校验）
+
+- **背景**：`npm run build:all` 是本地串联脚本（`&&`），一端失败后续全停；鸿蒙工具链（DevEco Studio / hvigor）在公共 runner 不可得，照搬 `build:all` 必然拖垮整条流水线
+- **决策**：`.github/workflows/build.yml` 设四个**互不声明 `needs`** 的并行 job——`web` / `ios` / `android` 各自产出制品，`harmony-codegen` 仅校验生成物；独立 runner、独立成败、独立上传，单端失败不阻断其余端
+- **鸿蒙降级**：只执行 `codegen:harmony` + `scan:harmony`（纯 Node、零工具链依赖），job 名与日志明示"不含 HAR 编译"；HAR 可构建性仍以本地 `npm run build:harmony` 为准，CI 绿灯不得被读作 HAR 可构建
+- **iOS 留 Linux runner**：`build:ios` 为纯 Node 的 codegen + 源码清单校验 + zip 打包，无编译步骤（CocoaPods 源码 pod 分发），不需要 macOS / Xcode；`pod lib lint` 未纳入
+- **替代方案**：单 job 跑 `build:all`（否——串联拖垮且耗时叠加）；三 job 完全不设鸿蒙（否——proto 变更后鸿蒙生成物失效将静默无感）；self-hosted runner 自备 DevEco（否——运维成本不划算）
+
+### 2.15 构建脚本的 CI 兼容性（跨平台双向约束）
+
+- **背景**：Windows 主导开发使两处平台专有假设入库——`build:android` 硬编码 `gradlew.bat`（Linux 不可执行，且违反 §2.4 的跨平台约束）；`android/gradlew` 索引模式为 `100644`（未记录可执行位，Linux 上必然 `Permission denied`）
+- **决策**：新增 `scripts/build-android.js`，按 `process.platform` 选择 wrapper，消除硬编码；`android/gradlew` 索引模式修正为 `100755`（文件内容零改动），workflow 内保留 `chmod +x` 兜底防再犯
+- **Node 陷阱**：Windows 分支须带 `shell: true`——Node.js 自 18.20.2 / 20.12.2 起（CVE-2024-27980 修复）`execFileSync` 执行 `.bat` / `.cmd` 不带 shell 会抛 `EINVAL`
+- **产物打包**：`build-ios.js` 的 `createZip` 改为"按平台排序候选工具 + 产物魔数校验（`PK\x03\x04`）"——Linux 的 GNU tar 不支持写出 zip 格式，原以 `tar -a` 为首选的回退链可能"成功"产出错格式归档，并因第一级即 return 而永久阻止后续 `zip` 候选
+- **Node 版本固定 22**：npm 11 的 install-scripts 机制会拦住 `esbuild` 的 postinstall，导致 vite 构建失败；Node 20 已 EOL
+- **防假绿**：仓库 `output/` 存在已入库的历史产物，三个产物 job 均在构建前清空本端子目录，配合 `if-no-files-found: error`，杜绝陈旧文件被当作本次制品上传
+
 ---
 
 ## 3. 模块依赖关系
@@ -533,26 +550,31 @@ bridge.hasMethod('getUserInfo')
 ```bash
 npm run install:all      # 安装所有依赖
 npm run build:proto      # 构建共享 proto 解析器（specs/proto-codegen）
-npm run codegen:harmony   # 鸿蒙端 proto codegen（生成 ArkTS）
+npm run codegen:harmony  # 鸿蒙端 proto codegen（生成 ArkTS）
+npm run scan:harmony     # 鸿蒙端装饰器扫描（生成 DataSyncBindings）
+npm run codegen:ios      # iOS 端 proto codegen（生成 ObjC 常量/方法映射/setter）
 npm run build:android    # 产出 AAR → output/android/
 npm run build:harmony    # 产出 HAR → output/harmony/
 npm run build:web        # 产出 TGZ → output/web/
-npm run build:all        # 产出全部
+npm run build:ios        # 产出 zip 源码包 → output/ios/
+npm run build:all        # 产出全部（四端串联，需本机具备各端工具链）
 ```
 
 ### 8.2 Android 构建
 
 ```
 npm run build:android
-  → cd android && gradlew.bat :and_web_library:assembleRelease
-    → :proto-codegen:compileKotlin           # 编译 Kotlin 解析器
-    → :and_web_library:protoCodegen          # JavaExec: 解析 proto → 生成 Kotlin 源码
-    → :and_web_library:compileReleaseKotlin   # 编译（含生成源码）
-    → :and_web_library:bundleReleaseAar
+  → node scripts/build-android.js              # 按 process.platform 选择 wrapper（跨平台入口）
+    → gradlew.bat | gradlew :and_web_library:assembleRelease
+      → :proto-codegen:compileKotlin           # 编译 Kotlin 解析器
+      → :and_web_library:protoCodegen          # JavaExec: 解析 proto → 生成 Kotlin 源码
+      → :and_web_library:compileReleaseKotlin   # 编译（含生成源码）
+      → :and_web_library:bundleReleaseAar
   → node scripts/post-build.js android
   → output/android/and_web_library-release.aar
 ```
 
+- 构建入口 `scripts/build-android.js` 跨平台：Windows 走 `gradlew.bat`（须 `shell: true`），Linux / macOS 走 `gradlew`（须可执行位，详见 §2.15）
 - Gradle 9.2.1 + AGP 9.0.1
 - Kotlin DSL（build.gradle.kts）
 - 版本目录：`gradle/libs.versions.toml`
@@ -605,12 +627,13 @@ npm run build:web
 
 | 变更范围 | 验证命令 | 通过标准 |
 |---------|---------|----------|
-| Android SDK | `cd android; .\gradlew.bat :and_web_library:assembleDebug` | BUILD SUCCESSFUL + protoCodegen 生成 5 个文件 |
+| Android SDK | `npm run build:android`（跨平台；Windows 侧快速验证可用 `cd android; .\gradlew.bat :and_web_library:assembleDebug`，Linux / CI 侧为 `./gradlew`） | BUILD SUCCESSFUL + protoCodegen 生成 5 个文件 |
 | 鸿蒙 SDK | `npm run build:harmony` | BUILD SUCCESSFUL + HAR 产物输出到 output/harmony/ |
 | 前端 SDK | `npm run build:web` | vite build 无错误 + TGZ 产物输出 |
-| iOS SDK | `npm run build:ios`（需 macOS + Xcode + CocoaPods） | codegen 产物正确 + zip 源码包输出到 output/ios/ |
+| iOS SDK | `npm run build:ios`（纯 Node 流程，Windows / Linux / macOS 均可） | codegen 产物正确 + zip 源码包输出到 output/ios/ |
 | 全部四端 | `npm run build:all` | 四端均 BUILD SUCCESSFUL + output/ 产物完整 |
 | Proto 变更 | `npm run build:proto` 后执行四端构建 | 解析器重建 + 四端 codegen 产物正确 |
+| CI 侧守门 | push 到 `main` 触发 `.github/workflows/build.yml` | 四 job 全绿 + 三端制品可下载（详见 §8.7） |
 
 #### 验证流程规范
 
@@ -634,8 +657,25 @@ npm run build:web
 output/
 ├── android/and_web_library-release.aar
 ├── harmony/hm_web_library.har
+├── ios/ios_web_library-1.0.0.zip
 └── web/mp-sdk-bridge-1.0.0.tgz
 ```
+
+### 8.7 CI 流水线（GitHub Actions）
+
+```
+.github/workflows/build.yml      触发：push 到 main / workflow_dispatch
+  ├── web              Node 22 → npm ci（根 + vue-web-sdk）→ build:web        → 制品 web-tgz
+  ├── ios              Node 22 → npm ci → build:ios → unzip -t 完整性校验     → 制品 ios-zip
+  ├── android          JDK 21 + Node 22 → npm ci → Gradle 缓存 → build:android → 制品 android-aar
+  └── harmony-codegen  Node 22 → codegen:harmony + scan:harmony → 生成物非空断言（无制品）
+  （四个 job 均为 ubuntu-latest，互不声明 needs）
+```
+
+- 单端失败不阻断其余端制品产出；失败原因在对应 job 日志中可观测
+- 三个产物 job 构建前清空本端 `output/` 子目录 + `if-no-files-found: error`，防陈旧制品假绿（§2.15）
+- `harmony-codegen` 为降级校验，仅证明 proto → ArkTS 生成链路未断，不宣称 HAR 可构建（§2.14）
+- 制品保留 90 天，从 Actions 运行页下载；不自动发 Release
 
 ---
 
@@ -716,12 +756,14 @@ output/
 | `specs/proto-codegen/src/index.ts` | 导出入口（@mp-sdk/proto-codegen） |
 | `specs/proto-codegen/package.json` | 共享解析器 npm 包配置 |
 | `specs/proto-codegen/tsconfig.json` | TypeScript 编译配置（CommonJS 输出） |
+| `scripts/build-android.js` | Android AAR 构建（按平台选择 Gradle wrapper，跨平台入口） |
 | `scripts/proto-codegen-harmony.js` | 鸿蒙端 Proto Codegen 脚本 |
 | `scripts/build-harmony.js` | 鸿蒙 HAR 构建（含 proto codegen 预处理） |
 | `scripts/proto-codegen-ios.js` | iOS 端 Proto Codegen 脚本（ObjC 常量/方法映射/setter Category） |
 | `scripts/build-ios.js` | iOS zip 源码包构建（含 proto codegen 预处理与源码完整性校验） |
 | `scripts/post-build.js` | 产物收集到 output/ |
 | `package.json` | 根目录 npm scripts（含 build:proto, codegen:harmony, codegen:ios） |
+| `.github/workflows/build.yml` | CI 流水线：四 job 并行（web / ios / android 制品 + harmony-codegen 降级校验） |
 | `specs/bridge-protocol.ts` | 多端共享协议定义（协议对齐参考） |
 
 ---

@@ -49,10 +49,17 @@ Test SubAgent 全程参与，按层级递进，**上层验证依赖下层通过*
 
 | 层级 | 名称 | 验证内容 | MP-SDK 对应命令 |
 |------|------|----------|------------------|
-| **L1** | 编译层 | 构建通过、生成物正确产出 | `npm run build:android` / `build:harmony` / `build:web` / `build:ios`（iOS 需 macOS + Xcode + CocoaPods） |
+| **L1** | 编译层 | 构建通过、生成物正确产出 | `npm run build:android` / `build:harmony` / `build:web` / `build:ios`（`build:ios` 为纯 Node 跨平台流程；`build:harmony` 需本机 DevEco Studio）+ CI 补充（见下） |
 | **L2** | 单元层 | 模块级行为符合 specs 的 Scenario | 各端既有单元测试（如 vue-web-sdk 测试） |
 | **L3** | 集成层 | 多端联调场景：数据同步全流程、事件路由跨容器 | 示例应用 + 真机/模拟器人工核对清单 |
 | **L4** | 回归层 | 既有能力域未被破坏 | 全量构建 + 主规范 Scenario 抽查 |
+
+**L1 的 CI 补充**（`.github/workflows/build.yml`）：
+
+- **触发**：push 到 `main` 自动运行；也可在 Actions 页手动触发（`workflow_dispatch`）为当前分支重跑
+- **覆盖**：`web` / `ios` / `android` 三个 job 并行构建并上传制品；`harmony-codegen` 仅校验 ArkTS 生成物（**降级**，不含 HAR 编译）
+- **制品获取**：运行页 **Artifacts** 区下载 `android-aar` / `web-tgz` / `ios-zip`，保留 90 天
+- **边界**：CI 绿灯**不替代**本地 L1；`harmony-codegen` 通过不得作为 HAR 可构建的依据，单端失败不阻断其余端制品产出
 
 **铁律**：L1 未通过时 MUST NOT 进入 L2 及以下流程；L1 输出无成功标志（`BUILD SUCCESSFUL` 等）时任务不允许标记完成。
 

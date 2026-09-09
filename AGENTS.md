@@ -19,11 +19,13 @@ MP-SDK 是跨平台 JSBridge SDK（Android / HarmonyOS / Web / iOS 四端），�
 
 1. **先分类后动手**：任何创造性工作先按 workflow.md 分类（Spike / Bounded / Architectural），未获人类伙伴批准前不写实现代码。
 2. **规范先行**：Architectural 变更必须先有 OpenSpec change（proposal / specs 增量 / design / tasks），实现与规范冲突时先修规范。
-3. **构建即完成**：代码变更必须实际执行对应端构建（`npm run build:android` / `build:harmony` / `build:web` / `build:ios`，iOS 需 macOS + Xcode + CocoaPods）并看到成功标志，才允许标记任务完成。仅凭静态推断不算完成。
+3. **构建即完成**：代码变更必须实际执行对应端构建（`npm run build:android` / `build:harmony` / `build:web` / `build:ios`）并看到成功标志，才允许标记任务完成。仅凭静态推断不算完成，CI 绿灯亦不替代本地构建验证（见第 9 条）。其中 `build:ios` 为纯 Node 流程，Windows / Linux / macOS 均可执行，仅可选的 `pod lib lint` 需 macOS + Xcode + CocoaPods；`build:harmony` 需本机 DevEco Studio。
 4. **组合模式**：Android / 鸿蒙端 WebView 一律组合持有，禁止继承式用法（`specs/Design.md` §2.6/§2.7）。
 5. **零依赖策略**：前端 SDK 不引入 protobuf 运行时或第三方桥接库依赖；Proto 仅作 Schema，传输用 JSON（§2.10）。
 6. **生成物不手改**：Codegen 产物视为构建产物，修改须回到 Proto 真相源。
 7. **中文文档**：所有规范与文档用中文 Markdown，技术名词与代码标识符保留英文原文。
+8. **可执行位随脚本入库**：新增或修改 shell 脚本（如 `android/gradlew`）必须同步修正 git 索引可执行位（`git update-index --chmod=+x <path>`，验证 `git ls-files -s` 输出 `100755`）。Windows 侧提交不会自动记录该位，Linux / macOS 与 CI 上会 `Permission denied`。
+9. **CI 是补充不是替代**：`.github/workflows/build.yml` 四个 job 并行守门（web / ios / android 产制品 + harmony-codegen），但其中 `harmony-codegen` 为**降级校验**，仅证明 proto → ArkTS 生成链路未断，HAR 可构建性仍须本地 `npm run build:harmony` 验证；CI 不得作为跳过第 3 条本地构建验证的理由。
 
 ## OpenSpec 快速上手
 

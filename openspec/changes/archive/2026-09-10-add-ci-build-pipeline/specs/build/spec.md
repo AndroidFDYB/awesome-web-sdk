@@ -27,10 +27,29 @@
 - AND 产物输出到与本地构建一致的统一产物目录
 
 #### Scenario: iOS 单端构建
-- GIVEN iOS 构建环境就绪（macOS + Xcode + CocoaPods）
+- GIVEN iOS 构建环境就绪（Node.js 运行时可用）
 - WHEN 执行 iOS 单端构建命令
 - THEN 先生成 Objective-C 产物，再完成源码完整性校验与产物打包
 - AND 打包产物输出到统一产物目录
+
+### Requirement: 环境前置要求
+构建体系 SHALL 明确各端环境前置要求，鸿蒙构建 MUST 依赖开发工具路径环境变量；iOS 构建 MUST NOT 依赖 macOS 工具链（其产物为源码包，构建过程无编译步骤）；环境缺失时构建 MUST 给出明确的失败提示而非静默跳过。
+
+#### Scenario: 鸿蒙环境变量缺失
+- GIVEN 未配置鸿蒙开发工具路径环境变量
+- WHEN 执行鸿蒙构建
+- THEN 构建失败并提示所需的环境变量
+
+#### Scenario: iOS 在非 macOS 环境构建
+- GIVEN 构建环境缺少 macOS 工具链（Linux CI runner 或 Windows 开发机）
+- WHEN 执行 iOS 构建
+- THEN 构建成功并产出源码包
+- AND 源码完整性校验通过
+
+#### Scenario: 环境齐全时构建
+- GIVEN 各端环境变量与工具链就绪
+- WHEN 执行全量构建
+- THEN 四端均构建成功
 
 ## ADDED Requirements
 

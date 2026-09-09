@@ -12,8 +12,11 @@ context: |
   - 所有文档与 artifact 一律使用中文 Markdown，技术名词与代码标识符保留英文原文。
   - 规范只描述可观察行为（输入/输出/错误条件），不写实现细节（类名/库选择）。
   - Requirement 文本须包含 RFC 2119 关键词（SHALL/MUST/SHOULD）。
-  - 代码变更必须通过对应端构建验证（npm run build:android / build:harmony / build:web / build:ios，
-    其中 build:ios 需 macOS + Xcode + CocoaPods 环境）才算完成。
+  - 代码变更必须通过对应端构建验证（npm run build:android / build:harmony / build:web / build:ios）才算完成。
+    其中 build:ios 为纯 Node 流程（codegen + 源码校验 + 打包），Windows / Linux / macOS 均可执行；
+    仅可选的编译验证（pod lib lint）需 macOS + Xcode + CocoaPods。build:harmony 需本机 DevEco Studio。
+  - 构建脚本须跨平台：不得使用 PowerShell 专有命令，不得硬编码单一操作系统的可执行入口；
+    新增 shell 脚本须同步修正 git 索引可执行位（Windows 侧提交不会自动记录）。
 
 # 各 artifact 规则（AI 创建对应文件时遵循）
 rules:
