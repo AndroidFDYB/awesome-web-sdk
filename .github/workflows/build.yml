@@ -1,0 +1,211 @@
+# MP-SDK 构建流水线
+#
+# 设计依据：openspec/changes/add-ci-build-pipeline/design.md
+#
+# 关键约定：
+# 1. 四个 job 并行且互不声明 needs —— 单端失败不阻断其余端制品产出。
+# 2. Node 固定 22 —— 其自带 npm 10.x。npm 11 引入 install-scripts 机制，
+#    esbuild 的 postinstall 未被 allowScripts 覆盖时不会执行，vite 构建将失败。
+# 3. iOS 制品在 ubuntu 上产出 —— build-ios.js 是纯 Node 的 codegen + 源码校验 + 打包，
+#    不需要 macOS / Xcode（仅可选的 pod lib lint 才需要）。
+# 4. 鸿蒙为降级校验 —— 仅验证 proto codegen 与装饰器扫描的生成物，不编译 HAR
+#    （DevEco Studio / hvigor 工具链在公共 runner 不可用）。
+# 5. 构建前清空本端 output 子目录 —— 仓库中 output/ 存在已入库的历史产物，
+#    若不清空，构建失败时 upload-artifact 的通配仍会匹配到陈旧文件并上传（假绿）。
+
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  web:
+    name: Web SDK (TGZ)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Clean stale artifacts
+        run: rm -rf output/web
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install vue-web-sdk dependencies
+        working-directory: vue-web-sdk
+        run: npm ci
+
+      - name: Build Web SDK
+        run: npm run build:web
+
+      - name: Upload web-tgz
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-tgz
+          path: output/web/*.tgz
+          if-no-files-found: error
+
+  ios:
+    name: iOS SDK (source zip)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Clean stale artifacts
+        run: rm -rf output/ios
+
+      # build-ios.js 在 Linux 上首选 zip 命令打包（GNU tar 不能写出 zip 格式）
+      - name: Ensure zip packer is available
+        run: |
+          if command -v zip >/dev/null 2>&1; then
+            echo "zip packer available."
+          else
+            echo "zip packer missing, installing..."
+            sudo apt-get update && sudo apt-get install -y zip
+          fi
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Build iOS SDK (codegen + source validation + zip)
+        run: npm run build:ios
+
+      # 双保险：脚本内已校验 zip 魔数，此处再验证归档可完整解包
+      - name: Verify zip integrity
+        run: |
+          for f in output/ios/*.zip; do
+            echo "Verifying $f"
+            unzip -t "$f" > /dev/null
+            unzip -l "$f" | head -12
+          done
+
+      - name: Upload ios-zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-zip
+          path: output/ios/*.zip
+          if-no-files-found: error
+
+  android:
+    name: Android SDK (AAR)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 与 android/gradle/gradle-daemon-jvm.properties 的 toolchainVersion=21 对齐，
+      # 避免依赖 Gradle daemon JVM criteria 的远程 provision
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Clean stale artifacts
+        run: rm -rf output/android
+
+      # 仓库历史中 gradlew 曾以 100644 入库；索引已修正为 100755，此处为防御性兜底
+      - name: Ensure gradlew is executable
+        run: chmod +x android/gradlew
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle/libs.versions.toml', 'android/**/*.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install root dependencies
+        run: npm ci
+
+      # android/local.properties 未入库，AGP 回退使用 runner 预装的 ANDROID_HOME
+      - name: Build Android SDK
+        run: npm run build:android
+
+      - name: Upload android-aar
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aar
+          path: output/android/*.aar
+          if-no-files-found: error
+
+  harmony-codegen:
+    name: HarmonyOS codegen (downgraded check, no HAR compile)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Scope notice
+        run: |
+          echo "::notice title=HarmonyOS 降级校验::本作业仅验证鸿蒙代码生成物可产出，不含 HAR 编译。DevEco Studio / hvigor 工具链在公共 runner 不可用；HAR 可构建性仍以本地 npm run build:harmony 为准。"
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Run HarmonyOS proto codegen
+        run: npm run codegen:harmony
+
+      - name: Scan decorators for DataSyncBindings
+        run: npm run scan:harmony
+
+      - name: Verify generated ArkTS artifacts
+        run: |
+          GEN_DIR=hm/hm_web_library/src/main/ets/generated
+          ls -la "$GEN_DIR"
+          for f in DataSyncChannels.ets DataSyncMethods.ets DataSyncSetters.ets DataSyncDecorators.ets DataSyncBindings.ets; do
+            test -s "$GEN_DIR/$f" || { echo "ERROR: missing or empty $GEN_DIR/$f"; exit 1; }
+            echo "OK: $f"
+          done
+          echo "ArkTS 生成物校验通过（5 个文件）"
+
+      # 非阻断提示：proto 变更后若忘记提交生成物，此处给出警告
+      - name: Report uncommitted generated artifacts
+        run: |
+          if [ -n "$(git status --porcelain -- hm/hm_web_library/src/main/ets/generated)" ]; then
+            echo "::warning title=鸿蒙生成物与提交不一致::codegen 产出与仓库中已提交的生成物存在差异，可能是修改 proto 后未重新提交生成物。"
+            git --no-pager diff --stat -- hm/hm_web_library/src/main/ets/generated
+          else
+            echo "生成物与提交内容一致。"
+          fi

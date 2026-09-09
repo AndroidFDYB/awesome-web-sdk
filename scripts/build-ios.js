@@ -94,41 +94,93 @@ function copyTree(src, dest) {
 }
 
 /**
+ * 校验文件是否为真正的 zip 归档（魔数 PK\x03\x04）
+ *
+ * 用于识破"命令执行成功但产出格式错误"的情况——例如 Linux 上的 GNU tar
+ * 并不支持写出 zip 格式，`tar -a -cf x.zip` 可能静默产出未压缩的 tar 归档。
+ */
+function isZipArchive(file) {
+  if (!fs.existsSync(file)) return false;
+  const fd = fs.openSync(file, 'r');
+  try {
+    const buf = Buffer.alloc(4);
+    const bytesRead = fs.readSync(fd, buf, 0, 4, 0);
+    return bytesRead === 4
+      && buf[0] === 0x50 && buf[1] === 0x4b   // 'P' 'K'
+      && buf[2] === 0x03 && buf[3] === 0x04;
+  } catch (e) {
+    return false;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
  * 将目录打包为 zip（目录名作为 zip 内的顶层目录）
  *
- * 依次尝试：
- * 1. tar（Windows 10+/macOS 内置 bsdtar，-a 按扩展名自动选择 zip 格式）
- * 2. PowerShell Compress-Archive（Windows 回退）
- * 3. zip 命令（Linux 回退）
+ * 候选工具按平台排序，每次尝试后校验产物魔数，不合格则删除并继续回退：
+ * - Linux：`zip` 命令优先（GNU tar 不能写出 zip 格式）
+ * - Windows / macOS：bsdtar 优先（`-a` 按后缀写出 zip），PowerShell 次之
+ *
+ * 所有候选统一使用 cwd + 目录名的方式打包，保证 zip 内顶层目录为 ios_web_library，
+ * 而非调用方的绝对路径层级。
  */
 function createZip(folderToZip, outZip) {
-  // 1. bsdtar
-  try {
-    execFileSync('tar', [
-      '-a', '-cf', outZip,
-      '-C', path.dirname(folderToZip),
-      path.basename(folderToZip),
-    ], { stdio: 'inherit' });
-    return;
-  } catch (e) {
-    console.warn('[Build] tar unavailable, falling back to PowerShell...');
+  const parentDir = path.dirname(folderToZip);
+  const baseName = path.basename(folderToZip);
+  const isLinux = process.platform === 'linux';
+  const shellExe = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
+
+  const candidates = [
+    {
+      name: 'tar -a',
+      preferred: !isLinux,
+      run: () => execFileSync('tar', [
+        '-a', '-cf', outZip,
+        '-C', parentDir,
+        baseName,
+      ], { stdio: 'inherit' }),
+    },
+    {
+      name: `${shellExe} Compress-Archive`,
+      preferred: false,
+      run: () => execFileSync(shellExe, [
+        '-NoProfile', '-Command',
+        `Compress-Archive -Path \"${folderToZip}\" -DestinationPath \"${outZip}\" -Force`,
+      ], { stdio: 'inherit' }),
+    },
+    {
+      name: 'zip -r',
+      preferred: isLinux,
+      run: () => execFileSync('zip', ['-r', '-q', outZip, baseName], {
+        cwd: parentDir,
+        stdio: 'inherit',
+      }),
+    },
+  ];
+
+  // 平台首选工具排到最前（sort 为稳定排序，同级保持声明顺序）
+  candidates.sort((a, b) => Number(b.preferred) - Number(a.preferred));
+
+  for (const candidate of candidates) {
+    fs.rmSync(outZip, { force: true });
+    try {
+      console.log(`  Trying packer: ${candidate.name}`);
+      candidate.run();
+    } catch (e) {
+      console.warn(`  ${candidate.name} unavailable: ${e.message}`);
+      continue;
+    }
+    if (isZipArchive(outZip)) {
+      console.log(`  Packed with ${candidate.name}.`);
+      return;
+    }
+    console.warn(`  ${candidate.name} did not produce a valid zip (magic number check failed), falling back...`);
+    fs.rmSync(outZip, { force: true });
   }
 
-  // 2. PowerShell Compress-Archive
-  try {
-    execFileSync('powershell.exe', [
-      '-NoProfile', '-Command', 'Compress-Archive',
-      '-Path', folderToZip,
-      '-DestinationPath', outZip,
-      '-Force',
-    ], { stdio: 'inherit' });
-    return;
-  } catch (e) {
-    console.warn('[Build] PowerShell unavailable, falling back to zip...');
-  }
-
-  // 3. zip 命令
-  execFileSync('zip', ['-r', outZip, folderToZip], { stdio: 'inherit' });
+  console.error('[Build] ERROR: All zip packing strategies failed to produce a valid zip archive.');
+  process.exit(1);
 }
 
 try {

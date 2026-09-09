@@ -8,7 +8,7 @@
     "codegen:harmony": "node scripts/proto-codegen-harmony.js",
     "scan:harmony": "node scripts/scan-decorators-harmony.js",
     "codegen:ios": "node scripts/proto-codegen-ios.js",
-    "build:android": "cd android && gradlew.bat :and_web_library:assembleRelease && cd .. && node scripts/post-build.js android",
+    "build:android": "node scripts/build-android.js",
     "build:harmony": "node scripts/build-harmony.js && node scripts/post-build.js harmony",
     "build:web": "cd vue-web-sdk && npm run build && npm pack && cd .. && node scripts/post-build.js web",
     "build:ios": "node scripts/build-ios.js && node scripts/post-build.js ios",
