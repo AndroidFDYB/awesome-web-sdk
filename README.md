@@ -1,21 +1,21 @@
 # MP-SDK
 
-> **跨平台 JSBridge SDK 框架** — 为 Android / HarmonyOS / Web 三端提供统一的 WebView 双向通信与数据同步能力。
+> **跨平台 JSBridge SDK 框架** — 为 Android / HarmonyOS / Web / iOS 四端提供统一的 WebView 双向通信与数据同步能力。
 
-[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20HarmonyOS%20%7C%20Web-blue)]()
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20HarmonyOS%20%7C%20Web%20%7C%20iOS-blue)]()
 [![License](https://img.shields.io/badge/license-Proprietary-red)]()
 
 ---
 
 ## 项目简介
 
-MP-SDK 是一套面向金融/会员业务场景的跨平台 JSBridge SDK。它以 **Protocol Buffers** 作为唯一真相源（Single Source of Truth），驱动三端代码自动生成，实现 **零运行时依赖** 的前端 SDK、**编译期注解处理** 的 Android SDK、以及 **低侵入工具注入** 的鸿蒙 SDK。
+MP-SDK 是一套面向金融/会员业务场景的跨平台 JSBridge SDK。它以 **Protocol Buffers** 作为唯一真相源（Single Source of Truth），驱动四端代码自动生成，实现 **零运行时依赖** 的前端 SDK、**编译期注解处理** 的 Android SDK、**低侵入工具注入** 的鸿蒙 SDK、以及 **源码级对齐** 的 iOS SDK（Objective-C + CocoaPods）。
 
 ### 核心特性
 
-- **Proto 驱动 Codegen**：单一 `.proto` 文件定义数据通道，三端自动生成注解/装饰器/常量/setter
+- **Proto 驱动 Codegen**：单一 `.proto` 文件定义数据通道，四端自动生成注解/装饰器/常量/setter/方法映射
 - **等待唤醒数据同步**：解决 Native→Web 大数据量传递的时序问题，请求自动阻塞直到数据就绪
-- **AppLink Scheme 跳转**：统一 Scheme 协议，三端一致的页面跳转能力
+- **AppLink Scheme 跳转**：统一 Scheme 协议，四端一致的页面跳转能力
 - **跨 WebView 事件路由**：四级消息格式（`container:scope:model:event`），Native 路由器实现跨 WebView emitter 通信
 - **零运行时前端依赖**：自动检测平台，无需 `protobuf.js` 或 `dsbridge` 包
 - **Android 编译期注入**：KSP 扫描 `@Needs*` 注解，无运行时反射开销
@@ -26,12 +26,12 @@ MP-SDK 是一套面向金融/会员业务场景的跨平台 JSBridge SDK。它�
 
 ## 功能模块
 
-| 模块 | Android | 鸿蒙 | 前端 SDK | 说明 |
-|------|---------|------|----------|------|
-| **Bridge** | `MPBridgeWebView` | `JSBridgeManager` | `bridge.ts` | 平台检测 + 双协议适配（Android WebViewJavascriptBridge / 鸿蒙 dsBridge） |
-| **DataSync** | `MPDataSyncHelper` + KSP 注解 | `DataSyncHelper` | `data-sync/` | 等待唤醒数据同步，Proto 驱动，三端自动生成通道 |
-| **AppLink** | `applink/` 子包 | `applink/` 目录 | `app-link/` 目录 | Scheme 协议解析与页面跳转，统一 `mpapp://` 前缀 |
-| **Emitter** | `emitter/` 子包 | `emitter/` 目录 | `emitter/` 目录 | 跨 WebView 事件路由，四级消息格式 `container:scope:model:event` |
+| 模块 | Android | 鸿蒙 | iOS | 前端 SDK | 说明 |
+|------|---------|------|-----|----------|------|
+| **Bridge** | `MPBridgeWebView` | `JSBridgeManager` | `MPJSBridgeManager` | `bridge.ts` | 平台检测 + 双协议适配（Android WebViewJavascriptBridge / 鸿蒙 dsBridge） |
+| **DataSync** | `MPDataSyncHelper` + KSP 注解 | `DataSyncHelper` | `MPDataSyncHelper` | `data-sync/` | 等待唤醒数据同步，Proto 驱动，四端自动生成通道 |
+| **AppLink** | `applink/` 子包 | `applink/` 目录 | `AppLink/` 目录 | `app-link/` 目录 | Scheme 协议解析与页面跳转，统一 `mpapp://` 前缀 |
+| **Emitter** | `emitter/` 子包 | `emitter/` 目录 | `Emitter/` 目录 | `emitter/` 目录 | 跨 WebView 事件路由，四级消息格式 `container:scope:model:event` |
 
 ---
 
@@ -468,7 +468,7 @@ eventRouter.onHostEvent((event: string, data: string) => {
    }
    ```
 
-2. 运行构建（codegen 自动生成三端代码）：
+2. 运行构建（codegen 自动生成四端代码）：
    ```bash
    npm run build:all
    ```

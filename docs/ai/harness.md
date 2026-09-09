@@ -49,9 +49,9 @@ Test SubAgent 全程参与，按层级递进，**上层验证依赖下层通过*
 
 | 层级 | 名称 | 验证内容 | MP-SDK 对应命令 |
 |------|------|----------|------------------|
-| **L1** | 编译层 | 构建通过、生成物正确产出 | `npm run build:android` / `build:harmony` / `build:web` |
+| **L1** | 编译层 | 构建通过、生成物正确产出 | `npm run build:android` / `build:harmony` / `build:web` / `build:ios`（iOS 需 macOS + Xcode + CocoaPods） |
 | **L2** | 单元层 | 模块级行为符合 specs 的 Scenario | 各端既有单元测试（如 vue-web-sdk 测试） |
-| **L3** | 集成层 | 三端联调场景：数据同步全流程、事件路由跨容器 | 示例应用 + 真机/模拟器人工核对清单 |
+| **L3** | 集成层 | 多端联调场景：数据同步全流程、事件路由跨容器 | 示例应用 + 真机/模拟器人工核对清单 |
 | **L4** | 回归层 | 既有能力域未被破坏 | 全量构建 + 主规范 Scenario 抽查 |
 
 **铁律**：L1 未通过时 MUST NOT 进入 L2 及以下流程；L1 输出无成功标志（`BUILD SUCCESSFUL` 等）时任务不允许标记完成。

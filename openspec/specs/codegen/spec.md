@@ -2,24 +2,30 @@
 
 ## Purpose
 
-定义从 Proto 真相源到三端（Android / Web / 鸿蒙）生成物 derivation 规则的行为契约：命名推导、生成物形态、Proto 语法子集约束与传输编码。Codegen 保证"一处定义、三端一致"，是 SDK 横向扩展能力的根基。
+定义从 Proto 真相源到四端（Android / Web / 鸿蒙 / iOS）生成物 derivation 规则的行为契约：命名推导、生成物形态、Proto 语法子集约束与传输编码。Codegen 保证"一处定义、四端一致"，是 SDK 横向扩展能力的根基。
 
 ## Requirements
 
 ### Requirement: 纯命名约定推导
-三端生成物 SHALL 全部由命名约定从 Proto message 名自动推导，MUST NOT 要求在 Proto 之外的任何端维护额外映射配置。
+四端（Android / Web / 鸿蒙 / iOS）生成物 SHALL 全部由命名约定从 Proto message 名自动推导，MUST NOT 要求在 Proto 之外的任何端维护额外映射配置。
 
 #### Scenario: 标准推导链
 - GIVEN 真相源中存在 PascalCase 命名的 message
 - WHEN Codegen 执行
 - THEN 通道名按约定转换为 camelCase
 - AND JSBridge 方法名按约定组合生成
-- AND 三端推导结果完全一致
+- AND 四端推导结果完全一致
 
 #### Scenario: 无额外配置参与
 - GIVEN 仅提供 Proto 真相源文件
 - WHEN 执行任一端 Codegen
 - THEN 生成成功且不读取任何端私有的通道映射配置文件
+
+#### Scenario: iOS 端生成
+- GIVEN 真相源中定义了数据通道
+- WHEN iOS 端 Codegen 执行
+- THEN 生成 Objective-C 形态的通道常量、方法映射与数据推送 API
+- AND 生成物位于构建前产物目录，缺失时构建流程先行补生成
 
 ### Requirement: Proto 语法子集
 Codegen SHALL 仅支持 message 加标量字段与 repeated 标量字段的语法子集，遇到嵌套 message、enum、oneof 等超出子集的语法时 MUST 构建失败并给出明确错误信息。
@@ -64,4 +70,4 @@ Codegen SHALL 仅支持 message 加标量字段与 repeated 标量字段的语�
 #### Scenario: 真相源变更触发再生成
 - GIVEN 真相源 Proto 文件发生变更
 - WHEN 执行构建
-- THEN 三端生成物自动更新，无需人工介入
+- THEN 四端生成物自动更新，无需人工介入

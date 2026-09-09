@@ -188,6 +188,26 @@ AGP 9.0.1 内置 Kotlin 2.2.10 编译器，与 KSP 集成时遇到以下问题�
 
 ---
 
+## 2026-09 iOS 平台纳入规范体系（四端化）
+
+### 背景
+
+iOS Objective-C SDK（`ios/ios_web_library/`）于 2026-08 完整落地（Bridge / AppLink / Emitter / DataSync 四模块与鸿蒙端行为对齐，`build:ios` 构建链与 CocoaPods 分发就绪），但规范体系仍停留在“三端”表述——iOS 是已实现却未被规范覆盖的活行为。
+
+### 变更（OpenSpec 变更 add-ios-platform，逆向轨追认）
+
+- 主规范四端化：bridge（平台自动检测 + URL 平台参数注入增补 iOS 场景）、codegen（纯命名约定推导 + 生成物可重建）、build（统一构建入口 + 产物形态 zip 源码包 + macOS 环境前置）、data-sync（通道唯一真相源 + 集成方扩展通道）
+- Purpose 段与全工程文档统一：config.yaml / AGENTS.md / harness.md / README.md / Design.md 的“三端”表述统一为四端
+- 平台是场景维度而非能力维度：不新建 ios 能力域；applink / emitter 的 Requirement 平台中立（“Native 端”），iOS 实现（.overFullScreen modal 透明弹窗 + __weak 回调注册表）满足现有语义
+
+### 设计原则
+
+- 逆向轨追认：实现已存在时，规范以既有可观察行为为准追认，不改动代码
+- iOS 分发形态为源码包（zip + podspec），与 AAR / HAR / TGZ 并列成为第四种产物形态
+- Windows 环境无法执行 build:ios（macOS 工具链前置），以构建链存在性核验替代；真机构建验证属后续代码变更的义务
+
+---
+
 ## 历史架构决策索引
 
 | 日期 | 主题 | Design.md 章节 |
@@ -202,3 +222,4 @@ AGP 9.0.1 内置 Kotlin 2.2.10 编译器，与 KSP 集成时遇到以下问题�
 | 2026-08 | Gradle 9.x 跨项目 JavaExec 配置解析独占锁修复 | 2.12 |
 | 2026-08 | Kotlin 扩展函数显式导入规范 | 2.13 |
 | 2026-08 | 集成测试验证阶段补齐（开发完成标准） | 8.5 |
+| 2026-09 | iOS 平台纳入规范体系（四端化，逆向轨追认） | 1 / 2.8 |

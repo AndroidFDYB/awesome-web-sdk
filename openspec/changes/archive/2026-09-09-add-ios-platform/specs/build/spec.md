@@ -1,10 +1,6 @@
-# Build 构建体系规范
+# Delta for Build
 
-## Purpose
-
-定义四端 SDK 的统一构建入口、产物形态与验证标准的行为契约：npm scripts 统一编排、构建产物输出、跨端环境要求。构建是"开发完成"的唯一判定标准。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 统一构建入口
 四端构建 SHALL 统一由根目录 package.json 的 npm scripts 编排，构建脚本 MUST 使用跨平台 Node.js 语法，MUST NOT 使用 PowerShell 专有命令。
@@ -63,17 +59,3 @@
 - GIVEN 各端环境变量与工具链就绪
 - WHEN 执行全量构建
 - THEN 四端均构建成功
-
-### Requirement: 构建验证完成标准
-任何代码变更 SHALL 在标记完成前通过对应端的实际构建验证，构建输出 MUST 出现明确的成功标志；仅凭静态推断 MUST NOT 作为完成依据。
-
-#### Scenario: 变更后验证
-- GIVEN 某端源码发生变更
-- WHEN 执行该端构建命令
-- THEN 构建输出包含成功标志
-- AND 对应任务方可标记完成
-
-#### Scenario: 构建失败阻止完成
-- GIVEN 某端构建失败
-- WHEN 尝试标记对应任务完成
-- THEN 该任务不允许被标记为完成

@@ -6,13 +6,14 @@
 
 ## 1. 工程概述
 
-MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容器 + JSBridge 双向通信通道。三端各自产出独立的 SDK 产物，通过统一的前端 SDK 实现跨平台适配。
+MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容器 + JSBridge 双向通信通道。四端各自产出独立的 SDK 产物，通过统一的前端 SDK 实现跨平台适配。
 
 | 平台 | 工程模块 | 产物 | 技术方案 |
 |------|----------|------|----------|
 | Android | `android/and_web_library` + `data-sync-processor` | AAR | 本地 `:library` 模块（JsBridge 源码） + MPBridgeWebView 组合封装 + KSP 编译期注解处理 |
 | 鸿蒙 | `hm/hm_web_library` | HAR | 原生 Web 组件 + BridgeUtils 工具注入 + DsBridgeProxy + 自定义 JSBridgeManager |
 | 前端 | `vue-web-sdk` | TGZ (npm) | Vite 库模式，零运行时依赖，自动检测平台，业务数据等待唤醒中间件 |
+| iOS | `ios/ios_web_library` | zip（CocoaPods 源码 pod） | WKWebView + bridge.js 注入（WKUserScript）+ MPJSBridgeManager 组合封装，AppLink 采用 Delegate 模式解耦宿主导航 |
 
 ---
 
@@ -66,9 +67,9 @@ MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容�
 - **导出**：`DsBridgeProxy`、`BridgeUtils` 从 `Index.ets` 导出，`MPBridgeWeb` 保留为可选便捷组件
 - **优势**：侵入性极低，页面完全掌控 `Web` 组件配置，工具方法可按需调用
 
-### 2.8 Proto 驱动的三端 Codegen 架构
+### 2.8 Proto 驱动的四端 Codegen 架构
 
-- **问题**：数据同步通道（注解/装饰器/常量）在三端各自硬编码，新增通道需手动修改 5+ 个文件，易遗漏且命名不一致
+- **问题**：数据同步通道（注解/装饰器/常量）在多端各自硬编码，新增通道需手动修改 5+ 个文件，易遗漏且命名不一致
 - **最终方案**：以 Protocol Buffers `.proto` 文件作为唯一真相源，各端 SDK 内置 codegen 工具链自动解析并生成对应的注解/装饰器/常量/setter
 - **Codegen 位置**：下沉到各端 SDK 内部，集成方只需引入 proto 文件即可生成
 - **两阶段流水线（Android）**：
@@ -607,8 +608,9 @@ npm run build:web
 | Android SDK | `cd android; .\gradlew.bat :and_web_library:assembleDebug` | BUILD SUCCESSFUL + protoCodegen 生成 5 个文件 |
 | 鸿蒙 SDK | `npm run build:harmony` | BUILD SUCCESSFUL + HAR 产物输出到 output/harmony/ |
 | 前端 SDK | `npm run build:web` | vite build 无错误 + TGZ 产物输出 |
-| 全部三端 | `npm run build:all` | 三端均 BUILD SUCCESSFUL + output/ 产物完整 |
-| Proto 变更 | `npm run build:proto` 后执行三端构建 | 解析器重建 + 三端 codegen 产物正确 |
+| iOS SDK | `npm run build:ios`（需 macOS + Xcode + CocoaPods） | codegen 产物正确 + zip 源码包输出到 output/ios/ |
+| 全部四端 | `npm run build:all` | 四端均 BUILD SUCCESSFUL + output/ 产物完整 |
+| Proto 变更 | `npm run build:proto` 后执行四端构建 | 解析器重建 + 四端 codegen 产物正确 |
 
 #### 验证流程规范
 
@@ -716,9 +718,11 @@ output/
 | `specs/proto-codegen/tsconfig.json` | TypeScript 编译配置（CommonJS 输出） |
 | `scripts/proto-codegen-harmony.js` | 鸿蒙端 Proto Codegen 脚本 |
 | `scripts/build-harmony.js` | 鸿蒙 HAR 构建（含 proto codegen 预处理） |
+| `scripts/proto-codegen-ios.js` | iOS 端 Proto Codegen 脚本（ObjC 常量/方法映射/setter Category） |
+| `scripts/build-ios.js` | iOS zip 源码包构建（含 proto codegen 预处理与源码完整性校验） |
 | `scripts/post-build.js` | 产物收集到 output/ |
-| `package.json` | 根目录 npm scripts（含 build:proto, codegen:harmony） |
-| `specs/bridge-protocol.ts` | 三端共享协议定义 |
+| `package.json` | 根目录 npm scripts（含 build:proto, codegen:harmony, codegen:ios） |
+| `specs/bridge-protocol.ts` | 多端共享协议定义（协议对齐参考） |
 
 ---
 
@@ -750,7 +754,7 @@ Native (Android/HarmonyOS)
 
 ### 10.4 标准数据通道
 
-> 以下通道由 `specs/proto/channels.proto` 定义，三端 codegen 自动生成对应的注解/装饰器/常量/setter。
+> 以下通道由 `specs/proto/channels.proto` 定义，四端 codegen 自动生成对应的注解/装饰器/常量/setter/方法映射。
 
 | 通道名 | Native 方法名 | 注入位置 | 说明 |
 |---|---|---|---|
@@ -1023,9 +1027,10 @@ Android 端有独立的 Kotlin 版解析器（`android/proto-codegen/`），逻�
 3. **Android**：Gradle Task 自动生成 `@NeedsLeadUserinfo` 注解 + `LEAD_USERINFO` 常量 + `setLeadUserinfo` setter
 4. **Vue**：Vite 插件 watch 自动生成 `@waitLeadUserinfoSync` 装饰器 + `LeadUserinfo` 接口
 5. **鸿蒙**：codegen 脚本自动生成 `DataSyncChannel.LEAD_USERINFO` + `setLeadUserinfo` setter
-6. 业务代码直接使用 `@NeedsLeadUserinfo` / `@waitLeadUserinfoSync` / `DataSyncChannel.LEAD_USERINFO`
+6. **iOS**：codegen 脚本自动生成 `MPDataSyncChannelLeadUserinfo` 常量 + `setLeadUserinfo` setter（Category）
+7. 业务代码直接使用 `@NeedsLeadUserinfo` / `@waitLeadUserinfoSync` / `DataSyncChannel.LEAD_USERINFO` / `MPDataSyncChannelLeadUserinfo`
 
-> 无需修改任何 SDK 源码，三端自动生成对应代码。
+> 无需修改任何 SDK 源码，四端自动生成对应代码。
 
 ---
 

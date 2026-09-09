@@ -1,10 +1,6 @@
-# Bridge 通信规范
+# Delta for Bridge
 
-## Purpose
-
-定义前端 SDK 与 Native 容器（Android / HarmonyOS）之间 JSBridge 双向通信的行为契约：平台检测、双协议适配、URL 平台参数注入、方法调用与回调。Bridge 是 DataSync、AppLink、Emitter 三大功能模块的通信底座。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 平台自动检测
 前端 SDK SHALL 在页面加载时自动检测当前运行环境（Android 容器 / HarmonyOS 容器 / iOS 容器 / 纯浏览器），并根据检测结果选择对应的桥接协议，MUST NOT 要求业务代码手工指定平台类型。
@@ -59,26 +55,3 @@ Native 端加载 WebView 页面时 SHALL 在页面 URL 上自动追加平台标�
 - WHEN Native 端处理该 URL
 - THEN 不重复追加平台参数
 - AND 既有参数值保持不变
-
-### Requirement: 零运行时依赖
-前端 SDK 的桥接层 MUST NOT 依赖任何第三方桥接库或协议库的运行时包，SHALL 通过自身代码完成双协议适配与数据序列化。
-
-#### Scenario: 纯浏览器环境安装
-- GIVEN 一个不含任何 Native 桥接库依赖的前端工程
-- WHEN 安装并引入前端 SDK
-- THEN SDK 正常完成模块加载
-- AND 平台检测与失败状态返回行为符合预期
-
-### Requirement: 异步方法调用与回调
-前端 SDK SHALL 支持向 Native 端发起异步方法调用，并在 Native 返回结果后正确回调；调用失败或超时时 MUST 返回可识别的错误状态而非无限挂起。
-
-#### Scenario: 调用 Native 方法成功
-- GIVEN 桥接通道已建立
-- WHEN 前端调用一个 Native 已注册的方法
-- THEN 前端在 Native 处理完成后收到结果回调
-
-#### Scenario: 调用 Native 未注册方法
-- GIVEN 桥接通道已建立
-- WHEN 前端调用一个 Native 未注册的方法
-- THEN 调用返回可识别的失败状态
-- AND 不影响后续其他方法的调用

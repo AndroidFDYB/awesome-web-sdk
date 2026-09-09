@@ -2,31 +2,32 @@ schema: spec-driven
 
 # 工程上下文（创建任何 artifact 前必读，AI 会参考但不会复制进产物）
 context: |
-  工程：MP-SDK —— 跨平台 JSBridge SDK（Android / HarmonyOS / Web 三端）。
+  工程：MP-SDK —— 跨平台 JSBridge SDK（Android / HarmonyOS / Web / iOS 四端）。
   核心架构：specs/proto/channels.proto 是数据同步通道的唯一真相源，
-  三端 Codegen 自动生成注解（Android KSP）/ 装饰器（Vue）/ 常量与 setter（鸿蒙）。
+  四端 Codegen 自动生成注解（Android KSP）/ 装饰器（Vue）/ 常量与 setter（鸿蒙）/ 常量与方法映射（iOS）。
   四大功能模块：Bridge（双协议桥接）、DataSync（等待唤醒数据同步）、
   AppLink（sk:// scheme 跳转）、Emitter（跨 WebView 四级事件路由）。
-  技术栈：Kotlin + KSP + Gradle 9.x / ArkTS + hvigor / TypeScript + Vite。
+  技术栈：Kotlin + KSP + Gradle 9.x / ArkTS + hvigor / TypeScript + Vite / Objective-C + CocoaPods。
   硬性约定：
   - 所有文档与 artifact 一律使用中文 Markdown，技术名词与代码标识符保留英文原文。
   - 规范只描述可观察行为（输入/输出/错误条件），不写实现细节（类名/库选择）。
   - Requirement 文本须包含 RFC 2119 关键词（SHALL/MUST/SHOULD）。
-  - 代码变更必须通过对应端构建验证（npm run build:android / build:harmony / build:web）才算完成。
+  - 代码变更必须通过对应端构建验证（npm run build:android / build:harmony / build:web / build:ios，
+    其中 build:ios 需 macOS + Xcode + CocoaPods 环境）才算完成。
 
 # 各 artifact 规则（AI 创建对应文件时遵循）
 rules:
   proposal:
     - 用中文撰写；Intent / Scope / 非目标 三段齐全
     - Scope 必须明确列出"不在范围内"的事项
-    - 涉及三端行为差异时，逐端说明
+    - 涉及多端行为差异时，逐端说明
   specs:
     - 用中文撰写；每个 Requirement 至少一个 Scenario
     - Scenario 使用 GIVEN/WHEN/THEN 结构，覆盖正常路径与边界情况
     - 只描述行为契约，不出现内部类名、函数名、框架选型
   design:
     - 用中文撰写；技术决策须给出备选方案与取舍理由
-    - 涉及 Proto 通道变更时，必须说明对三端生成物的影响
+    - 涉及 Proto 通道变更时，必须说明对四端生成物的影响
     - 关键决策须同步登记到 specs/Design.md 的架构决策索引
   tasks:
     - 用中文撰写；任务粒度以单次会话可完成为准，层级编号（1.1、1.2）

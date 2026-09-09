@@ -4,7 +4,7 @@
 
 ## 工程速览
 
-MP-SDK 是跨平台 JSBridge SDK（Android / HarmonyOS / Web 三端），以 `specs/proto/channels.proto` 为唯一真相源驱动三端 Codegen。四大功能模块：Bridge（通信底座）、DataSync（等待唤醒数据同步）、AppLink（scheme 跳转）、Emitter（跨 WebView 事件路由）。
+MP-SDK 是跨平台 JSBridge SDK（Android / HarmonyOS / Web / iOS 四端），以 `specs/proto/channels.proto` 为唯一真相源驱动四端 Codegen。四大功能模块：Bridge（通信底座）、DataSync（等待唤醒数据同步）、AppLink（scheme 跳转）、Emitter（跨 WebView 事件路由）。
 
 ## 三体系导航
 
@@ -19,7 +19,7 @@ MP-SDK 是跨平台 JSBridge SDK（Android / HarmonyOS / Web 三端），以 `sp
 
 1. **先分类后动手**：任何创造性工作先按 workflow.md 分类（Spike / Bounded / Architectural），未获人类伙伴批准前不写实现代码。
 2. **规范先行**：Architectural 变更必须先有 OpenSpec change（proposal / specs 增量 / design / tasks），实现与规范冲突时先修规范。
-3. **构建即完成**：代码变更必须实际执行对应端构建（`npm run build:android` / `build:harmony` / `build:web`）并看到成功标志，才允许标记任务完成。仅凭静态推断不算完成。
+3. **构建即完成**：代码变更必须实际执行对应端构建（`npm run build:android` / `build:harmony` / `build:web` / `build:ios`，iOS 需 macOS + Xcode + CocoaPods）并看到成功标志，才允许标记任务完成。仅凭静态推断不算完成。
 4. **组合模式**：Android / 鸿蒙端 WebView 一律组合持有，禁止继承式用法（`specs/Design.md` §2.6/§2.7）。
 5. **零依赖策略**：前端 SDK 不引入 protobuf 运行时或第三方桥接库依赖；Proto 仅作 Schema，传输用 JSON（§2.10）。
 6. **生成物不手改**：Codegen 产物视为构建产物，修改须回到 Proto 真相源。

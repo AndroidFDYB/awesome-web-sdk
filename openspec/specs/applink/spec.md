@@ -2,7 +2,7 @@
 
 ## Purpose
 
-定义前端页面向 Native 端发起页面跳转的 Scheme 协议行为契约：scheme 透传、解析、跳转执行与结果反馈。AppLink 统一三端一致的页面跳转能力，前端无需感知宿主平台差异。
+定义前端页面向 Native 端发起页面跳转的 Scheme 协议行为契约：scheme 透传、解析、跳转执行与结果反馈。AppLink 统一四端一致的页面跳转能力，前端无需感知宿主平台差异。
 
 ## Requirements
 
