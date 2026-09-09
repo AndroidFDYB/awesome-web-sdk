@@ -116,21 +116,30 @@ WebViewForVip                          WebViewForLoan
 
 ```
 mp_sdk/
-├── specs/                          # 规范与设计文档
+├── openspec/                      # OpenSpec 规范驱动开发体系
+│   ├── specs/                     # 行为规范真相源（六大能力域）
+│   │   ├── bridge/spec.md         # Bridge 通信规范
+│   │   ├── data-sync/spec.md      # DataSync 数据同步规范
+│   │   ├── applink/spec.md        # AppLink 跳转规范
+│   │   ├── emitter/spec.md        # Emitter 跨 WebView 事件路由规范
+│   │   ├── codegen/spec.md        # Codegen 代码生成规范
+│   │   └── build/spec.md          # Build 构建体系规范
+│   ├── changes/                   # 变更提案（增量合并回主规范）
+│   └── config.yaml                # Artifact 写作规则与项目上下文
+│
+├── specs/                        # 规范与设计文档
 │   ├── proto/
 │   │   ├── channels.proto          # SDK 标准数据通道（唯一真相源）
 │   │   └── custom/                 # 集成方扩展通道（可选）
 │   ├── proto-codegen/              # 共享 TS Proto 解析器
 │   ├── Design.md                   # 架构设计文档
-│   ├── Wiki.md                     # 架构变更记录
-│   ├── propersal_applink.md        # AppLink 需求文档
-│   └── propersal-emittor.md        # Emitter 需求文档
+│   └── Wiki.md                     # 架构变更记录
 │
-├── specsv2/                        # SSD 规范驱动开发文档
-│   ├── proposal.md                 # 需求 + 功能模块 + 接口 + 任务 DAG
-│   ├── constraints.md              # 项目/技术栈/团队约束
-│   ├── harness.md                  # Harness 军团规范
-│   └── capabilities.md             # MCP/Skill 接入规范
+├── docs/ai/                       # AI 协作规范
+│   ├── workflow.md                 # 开发工作流规范（三路径分类）
+│   └── harness.md                  # Harness 军团编排规范（SubAgent + 测试分层）
+│
+├── AGENTS.md                      # AI 协作总纲（三体系导航 + 行为红线）
 │
 ├── android/                        # Android SDK 工程
 │   ├── library/                    # JsBridge 源码模块（Java）
@@ -489,14 +498,26 @@ eventRouter.onHostEvent((event: string, data: string) => {
 
 ## 文档索引
 
+### 行为规范（OpenSpec 体系）
+
+| 文档 | 路径 | 说明 |
+|------|------|------|
+| Bridge 通信规范 | `openspec/specs/bridge/spec.md` | 平台检测、双协议适配、零依赖 |
+| DataSync 规范 | `openspec/specs/data-sync/spec.md` | 等待唤醒、通道真相源、扩展通道 |
+| AppLink 规范 | `openspec/specs/applink/spec.md` | Scheme 协议、跳转执行、结果状态码 |
+| Emitter 规范 | `openspec/specs/emitter/spec.md` | 四级消息格式、容器路由 |
+| Codegen 规范 | `openspec/specs/codegen/spec.md` | 命名推导、语法子集、传输编码 |
+| Build 规范 | `openspec/specs/build/spec.md` | 统一入口、产物形态、验证标准 |
+
+### 架构与 AI 协作
+
 | 文档 | 路径 | 说明 |
 |------|------|------|
 | 架构设计 | `specs/Design.md` | 完整的架构决策、模块依赖、API 参考 |
 | 变更记录 | `specs/Wiki.md` | 架构演进与关键决策历史 |
-| 需求规范 | `specsv2/proposal.md` | 功能需求、模块接口、任务 DAG |
-| 约束规范 | `specsv2/constraints.md` | 项目/技术栈/团队约束 |
-| Harness 规范 | `specsv2/harness.md` | 从需求到验收的 Harness 军团规范 |
-| 能力接入 | `specsv2/capabilities.md` | MCP/Skill 接入规范 |
+| AI 协作总纲 | `AGENTS.md` | 三体系导航 + 行为红线 |
+| 开发工作流 | `docs/ai/workflow.md` | Spike/Bounded/Architectural 三路径 |
+| Harness 编排 | `docs/ai/harness.md` | SubAgent 军团 + L1-L4 测试分层 |
 
 ---
 

@@ -719,7 +719,6 @@ output/
 | `scripts/post-build.js` | 产物收集到 output/ |
 | `package.json` | 根目录 npm scripts（含 build:proto, codegen:harmony） |
 | `specs/bridge-protocol.ts` | 三端共享协议定义 |
-| `specs/propersal.md` | 需求文档 |
 
 ---
 
