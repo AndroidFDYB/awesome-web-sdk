@@ -44,3 +44,11 @@ export interface VipInfo {
   expireDate: string;
   privileges: string[];
 }
+
+export interface LeadInfo {
+  investorId: string;
+  applyId: string;
+  orderId: string;
+  channelSource: string;
+  createTime: string;
+}

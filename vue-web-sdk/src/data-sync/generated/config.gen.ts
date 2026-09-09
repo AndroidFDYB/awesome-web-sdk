@@ -7,6 +7,7 @@ export const STANDARD_CHANNELS = {
   UserInfo: 'userInfo',
   LoanInfo: 'loanInfo',
   VipInfo: 'vipInfo',
+  LeadInfo: 'leadInfo',
 } as const;
 
 /** 内置标准通道配置 */
@@ -26,6 +27,12 @@ export const STANDARD_CHANNEL_CONFIGS: DataChannelConfig[] = [
   {
     name: 'vipInfo',
     nativeMethod: 'syncVipInfo',
+    injectTo: 'body',
+    timeout: 10000,
+  },
+  {
+    name: 'leadInfo',
+    nativeMethod: 'syncLeadInfo',
     injectTo: 'body',
     timeout: 10000,
   },

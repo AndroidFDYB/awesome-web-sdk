@@ -11,6 +11,7 @@ import { STANDARD_CHANNEL_CONFIGS } from './config.gen';
  * - syncUserInfo：接收 Native 推送的 UserInfo 数据
  * - syncLoanInfo：接收 Native 推送的 LoanInfo 数据
  * - syncVipInfo：接收 Native 推送的 VipInfo 数据
+ * - syncLeadInfo：接收 Native 推送的 LeadInfo 数据
  *
  * 收到数据后，自动调用 DataSyncManager.pushData() 唤醒等待队列。
  */

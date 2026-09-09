@@ -5,3 +5,4 @@ import { waitDataSync } from '../decorators';
 export const waitUserInfoSync: MethodDecorator = waitDataSync('userInfo');
 export const waitLoanInfoSync: MethodDecorator = waitDataSync('loanInfo');
 export const waitVipInfoSync: MethodDecorator = waitDataSync('vipInfo');
+export const waitLeadInfoSync: MethodDecorator = waitDataSync('leadInfo');
