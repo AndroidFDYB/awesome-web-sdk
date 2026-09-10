@@ -115,6 +115,12 @@ android {
 // 本地构建仍走 project 依赖，不受影响
 afterEvaluate {
     val publishVersion = (project.findProperty("version") as String?) ?: "0.0.0-SNAPSHOT"
+    // withSourcesJar 的 sourceReleaseJar 会打包 kotlin.srcDir 注册的 codegen 生成目录，
+    // 须显式声明对 protoCodegen 的依赖（Gradle 9 隐式依赖校验会直接拒绝构建；
+    // 首次 v0.1.0 发布实测踩中，本地 POM 生成任务不涉及 sourceJar 故未暴露）
+    tasks.named("sourceReleaseJar") {
+        dependsOn(protoCodegen)
+    }
     publishing {
         publications {
             create<MavenPublication>("release") {
