@@ -228,9 +228,16 @@ jobs:
       - name: Validate podspec version matches tag
         run: |
           TAG_VER=${GITHUB_REF#refs/tags/v}
-          POD_VER=$(grep "s.version" ios/ios_web_library/ios-web-library.podspec | sed "s/.*'\(.*\)'.*/\1/")
+          # 锚定行首的 s.version 赋值行提取版本号。不能用 grep "s.version" 子串匹配：
+          # s.source 行的 :tag => s.version.to_s 也含该子串，会使 POD_VER 变成多行值，
+          # 校验必然失败（首次 v1.0.0 发布实测踩中）。
+          POD_VER=$(sed -n "s/^[[:space:]]*s\.version[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p" ios/ios_web_library/ios-web-library.podspec)
           echo "Tag version: $TAG_VER"
           echo "Podspec version: $POD_VER"
+          if [ -z "$POD_VER" ]; then
+            echo "::error::Failed to extract s.version from ios-web-library.podspec."
+            exit 1
+          fi
           if [ "$TAG_VER" != "$POD_VER" ]; then
             echo "::error::Tag version ($TAG_VER) does not match podspec version ($POD_VER). Please update s.version in ios-web-library.podspec before tagging."
             exit 1
