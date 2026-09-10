@@ -83,3 +83,5 @@ podspec 的 `s.source` 当前为 `{ :path => '.' }`，仅支持本地开发引�
 - **[SPEC_REPO_TOKEN 泄露风险]** → 使用最小权限 PAT（仅 repo scope）；Secret 仅在 tag push 时注入 publish job，build job 不接触。
 - **[podspec 版本号与 tag 不一致]** → CI 显式校验 `tag version == podspec version`，不匹配则 fail fast，不写入 spec repo。
 - **[spec repo 不存在或 token 无权限]** → publish job 的 `git clone` 会失败，流水线整体标记为失败；需在实施前手动创建 spec repo 并配置 Secret。
+- **[Secret 仓库归属易错（实施实测踩中）]** → GitHub Actions 的 secret 仅对 workflow 所在仓库可见，误加到 `Specs` 仓库时被静默替换为空串、`git clone` 以 exit code 128 失败。已加空值防御（报 `SPEC_REPO_TOKEN is empty`）并在 README「维护者：发布基础设施配置」章节固化仓库归属说明。
+- **[版本提取的单行假设（实施实测踩中）]** → 本变更把 `s.source` 改为 `:tag => s.version.to_s` 后，`grep "s.version"` 会命中两行使提取值变多行。已改为 sed 锚定行首的 `s.version` 赋值行匹配 + 空值防御，教训是「修改 podspec 时须同步审视 CI 中所有对该文件的文本提取逻辑」。

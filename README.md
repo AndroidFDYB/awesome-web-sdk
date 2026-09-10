@@ -618,6 +618,16 @@ git push --tags
 
 CI 会自动：构建四端制品 → 校验 podspec 版本与 tag 一致 → 推送 podspec 至 `AndroidFDYB/Specs`。
 
+### 维护者：发布基础设施配置（一次性）
+
+首次启用发布流水线前，需完成以下配置：
+
+1. **创建私有 spec repo**：在 GitHub 创建 `AndroidFDYB/Specs` 私有仓库（可初始化 README）
+2. **创建 PAT（Classic）**：GitHub → Settings → Developer settings → Tokens (classic) → Generate new token，勾选 `repo` scope（最小权限，仅覆盖私有仓库读写）
+3. **添加 Secret（注意仓库归属）**：在 **SDK 仓库（`awesome-web-sdk`）** 的 Settings → Secrets and variables → Actions → New repository secret 中添加 `SPEC_REPO_TOKEN`，值为上一步的 token
+
+> **易错点**：Secret 必须添加到 **`awesome-web-sdk` 仓库**，而非 `Specs` 仓库——GitHub Actions 的 secret 仅对 workflow 所在仓库可见，加错仓库时 `${{ secrets.SPEC_REPO_TOKEN }}` 会被静默替换为空串，`git clone` 以 exit code 128 失败。publish-ios job 内置了空值防御与明确报错，遇到 `SPEC_REPO_TOKEN is empty` 时请检查 Secret 的仓库归属。
+
 ### 通用
 
 - 构建脚本使用 Node.js 跨平台语法，不使用 PowerShell 专有命令，也不硬编码单一操作系统的可执行入口
