@@ -10,7 +10,7 @@
  *
  * 使用方式：
  * ```typescript
- * import { emitter } from '@mp-sdk/bridge'
+ * import { emitter } from '@androidfdyb/bridge'
  *
  * // 监听跨 WebView 事件（在 WebViewForVip 页面中）
  * emitter.on('vip:vipbuy:success:two', (data) => {

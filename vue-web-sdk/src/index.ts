@@ -1,5 +1,5 @@
 /**
- * @mp-sdk/bridge
+ * @androidfdyb/bridge
  *
  * 跨平台 JSBridge SDK
  * 提供统一的 JS <-> Native 桥接通信能力 + 业务数据等待唤醒中间件
@@ -13,7 +13,7 @@
  *
  * 使用示例：
  * ```typescript
- * import { bridge, getPlatform } from '@mp-sdk/bridge'
+ * import { bridge, getPlatform } from '@androidfdyb/bridge'
  *
  * // 平台检测
  * const platform = getPlatform() // 'android' | 'harmony' | 'web'
@@ -22,7 +22,7 @@
  * const result = await bridge.callAsync('pay', { amount: 100 })
  *
  * // 数据同步（配合 Axios 拦截器 + 装饰器）
- * import { setupDataSyncInterceptor, waitUserInfoSync } from '@mp-sdk/bridge'
+ * import { setupDataSyncInterceptor, waitUserInfoSync } from '@androidfdyb/bridge'
  * import axios from 'axios'
  *
  * setupDataSyncInterceptor(axios, { channels: { ... } })

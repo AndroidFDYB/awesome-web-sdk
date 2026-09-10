@@ -14,7 +14,7 @@ import {
   waitVipInfoSync,
   getDataSyncManager,
   type InterceptorConfig,
-} from '@mp-sdk/bridge'
+} from '@androidfdyb/bridge'
 
 // 创建 Axios 实例
 const http: AxiosInstance = axios.create({

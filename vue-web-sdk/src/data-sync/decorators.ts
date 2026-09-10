@@ -19,7 +19,7 @@
  * 使用方式：
  * ```typescript
  * import axios from 'axios';
- * import { waitUserInfoSync, waitLoanInfoSync, setupDataSyncInterceptor } from '@mp-sdk/bridge';
+ * import { waitUserInfoSync, waitLoanInfoSync, setupDataSyncInterceptor } from '@androidfdyb/bridge';
  *
  * // 安装拦截器（一次性）
  * setupDataSyncInterceptor(axios, { channels: { ... } });

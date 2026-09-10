@@ -20,7 +20,7 @@
  *
  * 使用方式：
  * ```typescript
- * import { emitter } from '@mp-sdk/bridge'
+ * import { emitter } from '@androidfdyb/bridge'
  *
  * // 监听跨 WebView 事件
  * emitter.on('vip:vipbuy:success:two', (data) => { ... })

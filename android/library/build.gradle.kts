@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
+    `maven-publish`
 }
 
 android {
@@ -36,6 +37,39 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
+    }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+// ========================================
+// GitHub Packages (Maven) 发布配置
+// ========================================
+// 坐标：com.sharknade:jsbridge（and_web_library 的 Maven 传递依赖坐标）
+// 版本：CI 由 tag 提取后经 -Pversion 注入；本地缺省 0.0.0-SNAPSHOT
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                groupId = "com.sharknade"
+                artifactId = "jsbridge"
+                version = (project.findProperty("version") as String?) ?: "0.0.0-SNAPSHOT"
+                from(components["release"])
+            }
+        }
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/AndroidFDYB/awesome-web-sdk")
+                credentials {
+                    username = (project.findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR") ?: ""
+                    password = (project.findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_TOKEN") ?: ""
+                }
+            }
+        }
     }
 }
 

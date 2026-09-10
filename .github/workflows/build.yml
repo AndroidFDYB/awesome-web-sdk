@@ -15,7 +15,11 @@
 # 5. 构建前清空本端 output 子目录 —— 仓库中 output/ 存在已入库的历史产物，
 #    若不清空，构建失败时 upload-artifact 的通配仍会匹配到陈旧文件并上传（假绿）。
 # 6. 流水线由版本标签（tag）触发 —— push tags: v*。日常 push 不触发 CI。
-#    publish-ios job 依赖 ios job 成功后将 podspec 推送至私有 CocoaPods spec repo。
+#    publish-ios job 依赖 ios job 成功后将 podspec 推送至私有 CocoaPods spec repo
+#    （跨仓库 git push，PAT secret 认证）。
+#    publish-web / publish-android job 依赖对应 build job 成功后发布至 GitHub Packages
+#    （本仓库内置 registry，GITHUB_TOKEN 认证，零 secret 配置）。
+#    三个 publish job 互相独立 —— 单端发布失败不阻断其余端。
 
 name: build
 
@@ -30,6 +34,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: write
 
 env:
   NODE_VERSION: '22'
@@ -271,3 +276,83 @@ jobs:
           git push
 
           echo "Published ios_web_library ${VERSION} to spec repo."
+
+  # Web SDK 发布：依赖 web job 成功后将 npm 包发布至 GitHub Packages (npm)。
+  # 仅在版本标签（v*）触发时执行。认证用内置 GITHUB_TOKEN（本仓库 packages:write）。
+  publish-web:
+    name: Publish Web SDK to GitHub Packages (npm)
+    needs: [web]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # registry-url 让 setup-node 写入 .npmrc（auth token 占位），scope 必须为 owner 小写
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://npm.pkg.github.com
+
+      - name: Validate package version matches tag
+        run: |
+          TAG_VER=${GITHUB_REF#refs/tags/v}
+          PKG_VER=$(node -p "require('./vue-web-sdk/package.json').version")
+          echo "Tag version: $TAG_VER"
+          echo "Package version: $PKG_VER"
+          if [ -z "$PKG_VER" ]; then
+            echo "::error::Failed to read version from vue-web-sdk/package.json."
+            exit 1
+          fi
+          if [ "$TAG_VER" != "$PKG_VER" ]; then
+            echo "::error::Tag version ($TAG_VER) does not match package.json version ($PKG_VER). Please update version in vue-web-sdk/package.json before tagging."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: vue-web-sdk
+
+      - name: Build Web SDK
+        run: npm run build
+        working-directory: vue-web-sdk
+
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish
+        working-directory: vue-web-sdk
+
+  # Android SDK 发布：依赖 android job 成功后将双坐标（and-web-library + jsbridge）
+  # 发布至 GitHub Packages (Maven)。仅在版本标签（v*）触发时执行。
+  # 版本由 tag 提取后经 -Pversion 注入（源码不硬编码版本，tag 是唯一真相源），
+  # 认证用内置 GITHUB_TOKEN（build.gradle.kts 读 GITHUB_ACTOR / GITHUB_TOKEN）。
+  publish-android:
+    name: Publish Android SDK to GitHub Packages (Maven)
+    needs: [android]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 与 android build job 及 gradle-daemon-jvm.properties 的 toolchainVersion=21 对齐
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Report release version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "Publishing com.sharknade:and-web-library / com.sharknade:jsbridge version ${VERSION}"
+
+      - name: Publish to GitHub Packages (Maven)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :library:publish :and_web_library:publish "-Pversion=${GITHUB_REF#refs/tags/v}"

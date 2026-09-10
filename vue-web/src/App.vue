@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue'
-import { bridge, getPlatform, getPlatformDebugInfo, getDataSyncManager, type Platform } from '@mp-sdk/bridge'
+import { bridge, getPlatform, getPlatformDebugInfo, getDataSyncManager, type Platform } from '@androidfdyb/bridge'
 import { loanApi, vipApi } from './services/LoanApi'
 
 const platform = ref<Platform>('unknown')

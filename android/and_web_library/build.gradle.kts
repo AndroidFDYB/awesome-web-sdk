@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.android.library)
+    `maven-publish`
 //    alias(libs.plugins.kotlin.android)  // AGP 9.x 已内置 Kotlin
 }
 
@@ -96,6 +97,60 @@ android {
             java.srcDir(layout.buildDirectory.dir("generated/proto/kotlin"))
             // AGP 9.x 启用独立 Kotlin SourceSet 后，.kt 文件需额外注册到 kotlin source set
             kotlin.srcDir(layout.buildDirectory.dir("generated/proto/kotlin"))
+        }
+    }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+// ========================================
+// GitHub Packages (Maven) 发布配置
+// ========================================
+// 坐标：com.sharknade:and-web-library（主 SDK）
+// POM 改写：api(project(":library")) 自动生成的是不可解析的 project 坐标，
+// 发布时改写为 com.sharknade:jsbridge 同版本 Maven 坐标；
+// 本地构建仍走 project 依赖，不受影响
+afterEvaluate {
+    val publishVersion = (project.findProperty("version") as String?) ?: "0.0.0-SNAPSHOT"
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                groupId = "com.sharknade"
+                artifactId = "and-web-library"
+                version = publishVersion
+                from(components["release"])
+                pom.withXml {
+                    val depsNode = (asNode().get("dependencies") as groovy.util.NodeList)
+                        .filterIsInstance<groovy.util.Node>()
+                        .firstOrNull() ?: return@withXml
+                    depsNode.children().filterIsInstance<groovy.util.Node>().forEach { dep ->
+                        val aidNode = (dep.get("artifactId") as groovy.util.NodeList)
+                            .filterIsInstance<groovy.util.Node>()
+                            .firstOrNull() ?: return@forEach
+                        if (aidNode.text() == "library") {
+                            val gidNode = (dep.get("groupId") as groovy.util.NodeList)
+                                .filterIsInstance<groovy.util.Node>()
+                                .firstOrNull()
+                            gidNode?.setValue("com.sharknade")
+                            aidNode.setValue("jsbridge")
+                            dep.appendNode("version", publishVersion)
+                        }
+                    }
+                }
+            }
+        }
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/AndroidFDYB/awesome-web-sdk")
+                credentials {
+                    username = (project.findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR") ?: ""
+                    password = (project.findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_TOKEN") ?: ""
+                }
+            }
         }
     }
 }

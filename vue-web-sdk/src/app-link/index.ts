@@ -6,7 +6,7 @@
  *
  * 使用方式：
  * ```typescript
- * import { jump2Native } from '@mp-sdk/bridge'
+ * import { jump2Native } from '@androidfdyb/bridge'
  *
  * // 简单页面跳转
  * await jump2Native("sk://native={pageName='vip',url='https://example.com',title='VIP'}")

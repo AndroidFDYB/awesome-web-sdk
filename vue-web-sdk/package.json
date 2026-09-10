@@ -1,6 +1,6 @@
 {
-  "name": "@mp-sdk/bridge",
-  "version": "1.0.0",
+  "name": "@androidfdyb/bridge",
+  "version": "0.1.0",
   "description": "跨平台 JSBridge SDK - 提供统一的 JS <-> Native 桥接通信能力",
   "type": "module",
   "main": "./dist/mp-bridge.cjs",
@@ -22,8 +22,8 @@
     "pack": "npm pack",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": {
-    "@mp-sdk/proto-codegen": "file:../specs/proto-codegen"
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "peerDependencies": {
     "axios": ">=1.0.0"
