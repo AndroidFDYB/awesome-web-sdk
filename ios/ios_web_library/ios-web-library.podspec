@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.homepage         = 'https://example.com/mp-sdk'
   s.license          = { :type => 'Proprietary', :text => 'Proprietary — 内部项目，请勿外传。' }
   s.author           = { 'MP-SDK Team' => 'dev@example.com' }
-  s.source           = { :path => '.' }
+  s.source           = { :git => 'https://github.com/AndroidFDYB/awesome-web-sdk.git', :tag => s.version.to_s }
 
   s.ios.deployment_target = '12.0'
   s.frameworks       = 'UIKit', 'WebKit'

@@ -233,6 +233,42 @@ iOS Objective-C SDK（`ios/ios_web_library/`）于 2026-08 完整落地（Bridge
 
 ---
 
+## 2026-09 iOS CocoaPods 私有 spec repo 发布
+
+### 背景
+
+CI 流水线在每次 push to main 时运行，产出可下载的制品（zip / aar / tgz），iOS 消费者需手动下载 zip 并以 `:path =>` 方式集成——这不是 CocoaPods 的标准体验。同时日常 push 频繁触发四端 CI，成本高且多数时候不需要。
+
+### 变更（OpenSpec 变更 add-ios-cocoapods-publish）
+
+- CI 触发条件从 `push to main` 改为 `push tags: v*`（保留 `workflow_dispatch`），日常 push 不再触发 CI
+- podspec `s.source` 从 `{ :path => '.' }` 改为 `{ :git => '...', :tag => s.version.to_s }`，支持远程 `pod install`
+- 新增 `publish-ios` job：依赖 ios job 成功，校验 podspec 版本号与 git tag 一致后，通过纯 git 命令将 podspec 推送至私有 spec repo（`AndroidFDYB/Specs`）
+- 发布流程在 ubuntu runner 上完成，不引入 macOS / CocoaPods 依赖
+- 消费者体验从"下载 zip + `:path =>` 集成"变为"`pod repo add` + `pod install` 标准流程"
+
+### 设计决策
+
+| Design.md 章节 | 决策 |
+|----------------|------|
+| 2.16 | 合并 build + publish 到同一 workflow（避免跨 workflow 依赖复杂度） |
+| 2.17 | 纯 git 命令实现 spec repo push（零额外依赖，不需要 CocoaPods gem） |
+| 2.18 | CI 触发条件改为 tag-only（"构建 = 发版"语义） |
+| 2.19 | podspec s.source 改为 git + tag（本地 `:path =>` 不受影响） |
+
+### 新增基础设施
+
+- 私有 spec repo `AndroidFDYB/Specs`（GitHub Private 仓库）
+- GitHub Secret `SPEC_REPO_TOKEN`（PAT Classic，仅 `repo` scope）
+
+### 风险与缓解
+
+- 日常 push 不再 CI 验证 → `workflow_dispatch` 保留手动触发能力
+- `SPEC_REPO_TOKEN` 泄露风险 → 最小权限 PAT（仅 repo scope），仅 tag push 注入 publish job
+- podspec 版本号与 tag 不一致 → CI 显式校验，不匹配则 fail fast
+
+---
+
 ## 历史架构决策索引
 
 | 日期 | 主题 | Design.md 章节 |
@@ -250,3 +286,7 @@ iOS Objective-C SDK（`ios/ios_web_library/`）于 2026-08 完整落地（Bridge
 | 2026-09 | iOS 平台纳入规范体系（四端化，逆向轨追认） | 1 / 2.8 |
 | 2026-09 | CI 流水线拓扑（四 job 并行 + 鸿蒙降级校验） | 2.14 |
 | 2026-09 | 构建脚本的 CI 兼容性（跨平台双向约束） | 2.15 / 8.7 |
+| 2026-09 | 合并 build + publish 到同一 workflow | 2.16 |
+| 2026-09 | 纯 git 命令实现 spec repo push | 2.17 |
+| 2026-09 | CI 触发条件改为 tag-only | 2.18 |
+| 2026-09 | podspec s.source 改为 git + tag | 2.19 |

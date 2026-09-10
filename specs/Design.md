@@ -157,6 +157,52 @@ MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容�
 - **Node 版本固定 22**：npm 11 的 install-scripts 机制会拦住 `esbuild` 的 postinstall，导致 vite 构建失败；Node 20 已 EOL
 - **防假绿**：仓库 `output/` 存在已入库的历史产物，三个产物 job 均在构建前清空本端子目录，配合 `if-no-files-found: error`，杜绝陈旧文件被当作本次制品上传
 
+### 2.16 合并 build + publish 到同一 workflow
+
+- **背景**：iOS SDK 需要通过私有 CocoaPods spec repo 分发，需在 CI 构建成功后增加 podspec 发布步骤
+- **决策**：在现有 `build.yml` 上新增 `publish-ios` job，而非创建独立的 `publish.yml`
+- **理由**：
+  - 同一 tag push 触发，逻辑上是一次完整操作（构建 + 发布）
+  - `publish-ios` 声明 `needs: [ios]`，确保 iOS 构建成功后才发布
+  - 避免两个 workflow 并行运行同一组构建步骤的浪费
+- **被否备选**：
+  | 备选 | 否决理由 |
+  |------|----------|
+  | 独立 `publish.yml` | 同一 tag 触发时两个 workflow 并行跑，iOS 构建执行两次；跨 workflow 依赖（`workflow_run`）配置复杂且有时序风险 |
+  | publish 作为 ios job 的最后一个 step | 混合关注点：ios job 职责是构建验证，publish 是发布；publish 失败不应导致构建 job 整体回滚 |
+
+### 2.17 纯 git 命令实现 spec repo push
+
+- **背景**：`pod repo push` 的本质是将 podspec 文件推送到 spec repo 的对应版本目录，但需要安装 CocoaPods gem（Ruby 依赖）
+- **决策**：`git clone` spec repo → `mkdir` 版本目录 → `cp` podspec → `git commit && push`，纯 git 命令零额外依赖，runner 原生支持
+- **被否备选**：
+  | 备选 | 否决理由 |
+  |------|----------|
+  | `pod repo push`（安装 CocoaPods gem） | 引入 Ruby 工具链依赖；ubuntu runner 上 `pod spec lint --quick` 无法做编译校验（需 Xcode），等于只做语法检查，价值有限 |
+  | `pod trunk push`（公共源） | 项目为内部项目（Proprietary），不可发布到公共 CocoaPods trunk |
+
+### 2.18 CI 触发条件改为 tag-only
+
+- **背景**：CI 流水线原为 `push to main` 触发，日常开发 push 频繁，每次都跑四端 CI 成本高且多数时候不需要
+- **决策**：`on.push.tags: ['v*']`，去掉 `on.push.branches: [main]`；保留 `workflow_dispatch` 手动触发能力
+- **理由**：
+  - 版本发布是低频操作，tag 触发更符合"构建 = 发版"的语义
+  - `workflow_dispatch` 保留，可随时手动触发验证
+- **被否备选**：
+  | 备选 | 否决理由 |
+  |------|----------|
+  | 混合触发（branches + tags） | 日常 push 仍触发 CI，与"减少无意义执行"的目标矛盾；publish job 需额外 `if` 条件区分 tag / branch 触发 |
+  | 仅 `workflow_dispatch` | 失去 tag 语义，发版与 git 历史脱钩 |
+
+### 2.19 podspec s.source 改为 git + tag
+
+- **背景**：podspec 的 `s.source` 原为 `{ :path => '.' }`，仅支持本地开发引用，不支持远程 `pod install`
+- **决策**：`s.source = { :git => 'https://github.com/AndroidFDYB/awesome-web-sdk.git', :tag => s.version.to_s }`
+- **理由**：
+  - CocoaPods 从 spec repo 解析 podspec 后，按 `s.source` 的 `:git + :tag` 从 SDK 仓库 clone 对应版本源码
+  - 本地开发 Podfile 中以 `:path =>` 引用时，`:path` 覆盖 `s.source`，不受影响
+  - `s.version.to_s` 确保 tag 名与版本号自动对齐，无需手动同步两处
+
 ---
 
 ## 3. 模块依赖关系

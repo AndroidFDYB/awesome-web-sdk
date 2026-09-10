@@ -1,9 +1,11 @@
 # MP-SDK 构建流水线
 #
-# 设计依据：openspec/changes/add-ci-build-pipeline/design.md
+# 设计依据：
+#   openspec/changes/add-ci-build-pipeline/design.md
+#   openspec/changes/add-ios-cocoapods-publish/design.md
 #
 # 关键约定：
-# 1. 四个 job 并行且互不声明 needs —— 单端失败不阻断其余端制品产出。
+# 1. 四个 build job 并行且互不声明 needs —— 单端失败不阻断其余端制品产出。
 # 2. Node 固定 22 —— 其自带 npm 10.x。npm 11 引入 install-scripts 机制，
 #    esbuild 的 postinstall 未被 allowScripts 覆盖时不会执行，vite 构建将失败。
 # 3. iOS 制品在 ubuntu 上产出 —— build-ios.js 是纯 Node 的 codegen + 源码校验 + 打包，
@@ -12,12 +14,14 @@
 #    （DevEco Studio / hvigor 工具链在公共 runner 不可用）。
 # 5. 构建前清空本端 output 子目录 —— 仓库中 output/ 存在已入库的历史产物，
 #    若不清空，构建失败时 upload-artifact 的通配仍会匹配到陈旧文件并上传（假绿）。
+# 6. 流水线由版本标签（tag）触发 —— push tags: v*。日常 push 不触发 CI。
+#    publish-ios job 依赖 ios job 成功后将 podspec 推送至私有 CocoaPods spec repo。
 
 name: build
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 concurrency:
@@ -209,3 +213,47 @@ jobs:
           else
             echo "生成物与提交内容一致。"
           fi
+
+  # iOS CocoaPods 发布：依赖 ios job 成功后将 podspec 推送至私有 spec repo。
+  # 仅在版本标签（v*）触发时执行。纯 git 命令实现，不需要 macOS / CocoaPods。
+  publish-ios:
+    name: Publish iOS podspec to spec repo
+    needs: [ios]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate podspec version matches tag
+        run: |
+          TAG_VER=${GITHUB_REF#refs/tags/v}
+          POD_VER=$(grep "s.version" ios/ios_web_library/ios-web-library.podspec | sed "s/.*'\(.*\)'.*/\1/")
+          echo "Tag version: $TAG_VER"
+          echo "Podspec version: $POD_VER"
+          if [ "$TAG_VER" != "$POD_VER" ]; then
+            echo "::error::Tag version ($TAG_VER) does not match podspec version ($POD_VER). Please update s.version in ios-web-library.podspec before tagging."
+            exit 1
+          fi
+
+      - name: Push podspec to private spec repo
+        env:
+          SPEC_REPO_TOKEN: ${{ secrets.SPEC_REPO_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          SPEC_REPO="https://x-access-token:${SPEC_REPO_TOKEN}@github.com/AndroidFDYB/Specs.git"
+
+          echo "Cloning spec repo..."
+          git clone "$SPEC_REPO" spec-repo
+
+          mkdir -p "spec-repo/Specs/ios_web_library/${VERSION}"
+          cp ios/ios_web_library/ios-web-library.podspec "spec-repo/Specs/ios_web_library/${VERSION}/"
+
+          cd spec-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Release ios_web_library ${VERSION}"
+          git push
+
+          echo "Published ios_web_library ${VERSION} to spec repo."

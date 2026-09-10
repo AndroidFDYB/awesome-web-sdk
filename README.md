@@ -260,7 +260,7 @@ npm run build:web         # 仅前端 SDK
 
 ## CI 自动构建
 
-推送到 `main` 后，GitHub Actions 自动产出三端制品（[运行记录](https://github.com/AndroidFDYB/awesome-web-sdk/actions/workflows/build.yml)）：
+推送版本标签（`v*`）后，GitHub Actions 自动构建四端并产出制品（[运行记录](https://github.com/AndroidFDYB/awesome-web-sdk/actions/workflows/build.yml)）：
 
 | Job | Runner | 执行内容 | 制品 |
 |-----|--------|----------|------|
@@ -268,9 +268,12 @@ npm run build:web         # 仅前端 SDK
 | `ios` | ubuntu-latest | `npm ci` → `build:ios` → `unzip -t` 完整性校验 | `ios-zip` |
 | `android` | ubuntu-latest + JDK 21 | `npm ci` → Gradle 缓存 → `build:android` | `android-aar` |
 | `harmony-codegen` | ubuntu-latest | `codegen:harmony` + `scan:harmony` + 生成物非空断言 | 无 |
+| `publish-ios` | ubuntu-latest | 校验 podspec 版本 == tag → 推送 podspec 至私有 spec repo | 无（发布到 spec repo） |
 
-- 四个 job 并行且**互不声明依赖**：单端失败不影响其余端制品产出
-- 制品保留 90 天，在对应运行页的 **Artifacts** 区下载；也可在 Actions 页手动触发（`workflow_dispatch`）为当前分支重跑
+- 流水线由 **版本标签（`v*`）触发**，日常 push 不运行 CI；可在 Actions 页手动触发（`workflow_dispatch`）
+- 四个 build job 并行且**互不声明依赖**：单端失败不影响其余端制品产出
+- `publish-ios` 依赖 `ios` job 成功后执行，仅处理 iOS podspec 发布
+- 制品保留 90 天，在对应运行页的 **Artifacts** 区下载
 
 > **鸿蒙边界说明**：`harmony-codegen` 仅校验 proto → ArkTS 生成链路（DevEco Studio / hvigor 工具链在公共 runner 不可得），**不代表 HAR 可构建**。HAR 的可构建性仍以本地 `npm run build:harmony` 为准。
 
@@ -571,13 +574,49 @@ npm run build:ios                         # → output/ios/ios_web_library-1.0.0
 
 # 以下仅编译验证与集成时需要（macOS）
 xcode-select --install                    # 安装 Xcode 命令行工具
-pod repo update                           # 更新 CocoaPods 仓库索引（可选）
-
-# 集成方式
-pod 'ios_web_library', :path => 'ios_web_library'   # 本地源码接入
-# 或
-pod repo push <repo> ios-web-library.podspec          # 推送私有仓库
 ```
+
+**CocoaPods 集成（标准方式）**：
+
+```bash
+# 首次配置：添加私有 spec repo（一次性）
+pod repo add mp-specs https://github.com/AndroidFDYB/Specs.git
+
+# Podfile 中引用
+source 'https://github.com/AndroidFDYB/Specs.git'
+source 'https://cdn.cocoapods.org/'
+
+pod 'ios_web_library', '~> 1.0'
+
+# 安装
+pod install
+```
+
+**本地开发集成**（覆盖远程 source，使用本地路径）：
+
+```ruby
+pod 'ios_web_library', :path => './ios_web_library'
+```
+
+### 发版流程
+
+iOS SDK 通过 git tag 触发 CI 自动发布至私有 CocoaPods spec repo：
+
+```bash
+# 1. 更新 podspec 版本号
+#    编辑 ios/ios_web_library/ios-web-library.podspec，修改 s.version = 'x.y.z'
+
+# 2. 提交变更
+git add ios/ios_web_library/ios-web-library.podspec
+git commit -m "chore: bump ios_web_library to x.y.z"
+git push
+
+# 3. 打 tag 并推送（触发 CI 构建 + 发布）
+git tag vx.y.z
+git push --tags
+```
+
+CI 会自动：构建四端制品 → 校验 podspec 版本与 tag 一致 → 推送 podspec 至 `AndroidFDYB/Specs`。
 
 ### 通用
 
