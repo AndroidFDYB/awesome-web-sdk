@@ -269,6 +269,37 @@ CI 流水线在每次 push to main 时运行，产出可下载的制品（zip / 
 
 ---
 
+## 2026-09 多 registry 统一发布（GitHub Packages：Android Maven + Web npm）
+
+### 背景
+
+iOS 线建立「tag 触发 → CI 构建 → fail-fast 校验 → 私有 spec repo 发布」模式后，Android（AAR）与 Web（npm）消费者仍需从 CI Artifacts 手动下载制品安装。本变更将该模式推广至两端，发布目标统一为 GitHub Packages（托管平台内置私有 registry，Maven + npm 双 registry）。
+
+### 变更（OpenSpec 变更 add-multi-registry-publish）
+
+- Web 线：npm 包改名 `@mp-sdk/bridge` → `@androidfdyb/bridge`（GitHub Packages scope = owner 硬约束，BREAKING）；移除 `file:../specs/proto-codegen` 发布炸雷依赖（构建期工具，产物已 bundle）；`publishConfig` 指向 `npm.pkg.github.com`
+- Android 线：`library` / `and_web_library` 两模块接入 maven-publish，双坐标 `com.sharknade:jsbridge` + `com.sharknade:and-web-library`；后者 POM 经 `pom.withXml` 把 `project(:library)` 依赖改写为同版本 Maven 坐标；版本由 tag 经 `-Pversion` 注入（源码不硬编码，本地缺省 `0.0.0-SNAPSHOT`）
+- CI 线：workflow permissions 扩 `packages: write`；新增 `publish-web` / `publish-android` job，与既有 `publish-ios` 并列（各 `needs` 对应 build job，GITHUB_TOKEN 认证零新增 secret）
+- 消费者体验：Android 从「下载 AAR 手动导入」变为「settings.gradle 仓库配置 + 一行 `implementation` 依赖」；Web 从「下载 tgz」变为「`.npmrc` + `npm install`」
+
+### 设计决策
+
+| Design.md 章节 | 决策 |
+|----------------|------|
+| 2.20 | 私有 registry 选型 GitHub Packages（双 registry；GITHUB_TOKEN 发布 / PAT `read:packages` 消费） |
+| 2.21 | Android 双坐标 + POM 依赖改写（含 sourceReleaseJar 隐式依赖实施注记） |
+| 2.22 | tag 驱动 `-Pversion` 版本注入（源码不硬编码版本） |
+| 2.23 | npm 包改名 `@androidfdyb/bridge` + `file:` 依赖清理（BREAKING） |
+
+### 风险与缓解
+
+- GitHub Packages 已发布版本不可覆盖删除 → 「tag 即最终版本」纪律：发布前 fail-fast 校验，测试迭代用一次性版本号（v0.1.0 验证期 npm 0.1.0 已占坑，即以 bump 0.1.1 重发处置）
+- 双坐标给消费者引入隐式 jsbridge 依赖 → POM `compile` scope 传递依赖可 override；README 集成文档显式列出两坐标
+- npm 包改名破坏性变更 → README BREAKING 标注；旧 tgz 手动安装路径不受影响
+- 发布失败连带影响 → build 与 publish 双层失败隔离，单端发布失败不影响其余端发布
+
+---
+
 ## 历史架构决策索引
 
 | 日期 | 主题 | Design.md 章节 |
@@ -290,3 +321,7 @@ CI 流水线在每次 push to main 时运行，产出可下载的制品（zip / 
 | 2026-09 | 纯 git 命令实现 spec repo push | 2.17 |
 | 2026-09 | CI 触发条件改为 tag-only | 2.18 |
 | 2026-09 | podspec s.source 改为 git + tag | 2.19 |
+| 2026-09 | 私有 registry 选型：GitHub Packages（Maven + npm 双 registry） | 2.20 |
+| 2026-09 | Android 双坐标 + POM 依赖改写 | 2.21 |
+| 2026-09 | tag 驱动 -Pversion 版本注入 | 2.22 |
+| 2026-09 | npm 包改名 @androidfdyb/bridge + file: 依赖清理 | 2.23 |

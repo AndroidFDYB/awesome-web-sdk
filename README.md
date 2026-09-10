@@ -243,7 +243,7 @@ output/
 ├── android/and_web_library-release.aar    # Android SDK
 ├── harmony/hm_web_library.har            # 鸿蒙 SDK
 ├── ios/ios_web_library-1.0.0.zip         # iOS SDK（CocoaPods 源码 pod）
-└── web/mp-sdk-bridge-1.0.0.tgz           # 前端 SDK
+└── web/androidfdyb-bridge-<version>.tgz   # 前端 SDK
 ```
 
 ### 单独构建
@@ -269,10 +269,12 @@ npm run build:web         # 仅前端 SDK
 | `android` | ubuntu-latest + JDK 21 | `npm ci` → Gradle 缓存 → `build:android` | `android-aar` |
 | `harmony-codegen` | ubuntu-latest | `codegen:harmony` + `scan:harmony` + 生成物非空断言 | 无 |
 | `publish-ios` | ubuntu-latest | 校验 podspec 版本 == tag → 推送 podspec 至私有 spec repo | 无（发布到 spec repo） |
+| `publish-web` | ubuntu-latest + Node 22 | 校验 package.json 版本 == tag → `npm publish` 至 GitHub Packages | 无（发布到 npm registry） |
+| `publish-android` | ubuntu-latest + JDK 21 | tag 版本经 `-Pversion` 注入 → Gradle `publish` 双坐标至 GitHub Packages | 无（发布到 Maven registry） |
 
 - 流水线由 **版本标签（`v*`）触发**，日常 push 不运行 CI；可在 Actions 页手动触发（`workflow_dispatch`）
 - 四个 build job 并行且**互不声明依赖**：单端失败不影响其余端制品产出
-- `publish-ios` 依赖 `ios` job 成功后执行，仅处理 iOS podspec 发布
+- 三个 publish job 并列（各 `needs` 对应 build job，仅 tag 触发）：单端发布失败不影响其余端发布；每个 publish job 第一步即做版本 fail-fast 校验，版本不一致时 registry 零写入
 - 制品保留 90 天，在对应运行页的 **Artifacts** 区下载
 
 > **鸿蒙边界说明**：`harmony-codegen` 仅校验 proto → ArkTS 生成链路（DevEco Studio / hvigor 工具链在公共 runner 不可得），**不代表 HAR 可构建**。HAR 的可构建性仍以本地 `npm run build:harmony` 为准。
@@ -286,7 +288,7 @@ npm run build:web         # 仅前端 SDK
 ### 前端 SDK
 
 ```typescript
-import { bridge, setupDataSyncHandlers, waitUserInfoSync } from '@mp-sdk/bridge';
+import { bridge, setupDataSyncHandlers, waitUserInfoSync } from '@androidfdyb/bridge';
 import axios from 'axios';
 
 // 初始化数据同步
@@ -439,7 +441,7 @@ Web({ src: url, controller: controller })
 ### 前端 SDK 使用
 
 ```typescript
-import { emitter } from '@mp-sdk/bridge';
+import { emitter } from '@androidfdyb/bridge';
 
 // 监听跨 WebView 事件
 emitter.on('vip:vipbuy:success:two', (data) => {
@@ -598,25 +600,78 @@ pod install
 pod 'ios_web_library', :path => './ios_web_library'
 ```
 
-### 发版流程
+### GitHub Packages 集成（Android / Web）
 
-iOS SDK 通过 git tag 触发 CI 自动发布至私有 CocoaPods spec repo：
+Android AAR 与 Web npm 包通过 GitHub Packages 私有 registry 分发。**消费前置：一次性创建 PAT（Classic）**——GitHub → Settings → Developer settings → Tokens (classic) → Generate new token，勾选 `read:packages`（最小权限，仅够读取私有制品）。
+
+**Android（Maven）：**
+
+```kotlin
+// settings.gradle.kts —— FAIL_ON_PROJECT_REPOS 模式下仓库必须集中在 settings 声明
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url = uri("https://maven.pkg.github.com/AndroidFDYB/awesome-web-sdk")
+            credentials {
+                username = "<GitHub 用户名>"
+                password = "<read:packages PAT>"
+            }
+        }
+    }
+}
+```
+
+```kotlin
+// build.gradle.kts —— 一行依赖
+dependencies {
+    implementation("com.sharknade:and-web-library:0.1.1")
+}
+```
+
+> 双坐标说明：`and-web-library` 的 POM 已声明对 `com.sharknade:jsbridge` 的 `compile` 传递依赖，正常无需手动声明；如需锁定/覆盖 jsbridge 版本，可显式添加 `implementation("com.sharknade:jsbridge:<版本>")`。
+
+**Web（npm）：**
+
+```ini
+# 工程根 .npmrc —— scope 级 registry 指向 + 认证
+@androidfdyb:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=<read:packages PAT>
+```
 
 ```bash
-# 1. 更新 podspec 版本号
-#    编辑 ios/ios_web_library/ios-web-library.podspec，修改 s.version = 'x.y.z'
+npm install @androidfdyb/bridge
+```
+
+> 三端凭证共享同一「PAT + read:packages」原则：Android Maven 凭据、Web `.npmrc` authToken、iOS spec repo 的 git 凭据均可用同一 token 配置（iOS 侧详见上方 CocoaPods 集成）。
+
+### 发版流程
+
+一次 git tag 驱动三端齐发（iOS → spec repo；Android → Maven registry；Web → npm registry）：
+
+```bash
+# 1. 三端版本对齐（tag 是唯一版本真相源）
+#    - Web:     vue-web-sdk/package.json 的 version 改为 x.y.z
+#    - iOS:     ios/ios_web_library/ios-web-library.podspec 的 s.version 改为 x.y.z
+#    - Android: 无需改源码（版本由 CI 从 tag 经 -Pversion 注入）
 
 # 2. 提交变更
-git add ios/ios_web_library/ios-web-library.podspec
-git commit -m "chore: bump ios_web_library to x.y.z"
+git add vue-web-sdk/package.json ios/ios_web_library/ios-web-library.podspec
+git commit -m "chore: bump to x.y.z"
 git push
 
-# 3. 打 tag 并推送（触发 CI 构建 + 发布）
+# 3. 打 tag 并推送（触发 CI 构建 + 三端发布）
 git tag vx.y.z
 git push --tags
 ```
 
-CI 会自动：构建四端制品 → 校验 podspec 版本与 tag 一致 → 推送 podspec 至 `AndroidFDYB/Specs`。
+CI 会自动：构建四端制品 → 三个 publish job 并行发布（npm 包 / Maven 双坐标 / spec repo podspec），各 job 第一步 fail-fast 校验版本与 tag 一致。
+
+> **BREAKING（自 v0.1.0 起）**：Web npm 包由 `@mp-sdk/bridge` 改名为 `@androidfdyb/bridge`（GitHub Packages npm registry 强制 scope = owner）。消费者需同步更新依赖名与 import 语句；CI 产出的 tgz 手动安装路径不受影响。
+
+> **纪律：tag 即最终版本**——GitHub Packages（npm 与 Maven）已发布版本**不可覆盖删除**，发布前先本地核对版本校验逻辑，测试迭代用一次性版本号，正式 tag 力求一次成功。
 
 ### 维护者：发布基础设施配置（一次性）
 

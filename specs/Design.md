@@ -203,6 +203,39 @@ MP-SDK 是一套跨平台 JSBridge SDK 框架，为业务方提供 WebView 容�
   - 本地开发 Podfile 中以 `:path =>` 引用时，`:path` 覆盖 `s.source`，不受影响
   - `s.version.to_s` 确保 tag 名与版本号自动对齐，无需手动同步两处
 
+### 2.20 私有 registry 选型：GitHub Packages（Maven + npm 双 registry）
+
+- **背景**：iOS 线已建立「tag 触发 → CI 构建 → fail-fast 校验 → 推送私有 spec repo」的发布模式，Android AAR 与 Web npm 包需要同等的私有分发通道；项目 Proprietary 不可公开分发
+- **决策**：Android 走 `maven.pkg.github.com/AndroidFDYB/awesome-web-sdk`（Maven registry），Web 走 `npm.pkg.github.com`（npm registry）；发布认证用 workflow 内置 `GITHUB_TOKEN`（`permissions: packages: write`），消费认证用 PAT `read:packages`
+- **理由**：与代码同平台托管，认证模型统一，零基础设施、零新增 secret——发布侧零「加错仓库」类事故（iOS 线 PAT secret 实测踩中过）
+- **被否备选**：
+  | 备选 | 否决理由 |
+  |------|----------|
+  | JitPack | 私有模式收费；jitpack.io 仅适用开源库 |
+  | 公共 npmjs.com / Maven Central | 项目 Proprietary，不可公开分发 |
+  | 自建 Nexus / Verdaccio | 需服务器运维，超出团队投入意愿 |
+  | git tag 直装 | Maven 无标准机制；npm git 依赖不支持 monorepo 子目录 |
+
+### 2.21 Android 双坐标：`com.sharknade:and-web-library` + `com.sharknade:jsbridge`
+
+- **背景**：`:and_web_library` 对 JsBridge fork 的依赖是 `api(project(":library"))`，project 依赖在 Maven POM 中不可解析，直接发布会产出消费者无法构建的断裂 POM
+- **决策**：双坐标发布——`library` 模块发布为 `com.sharknade:jsbridge`，`and_web_library` 发布为 `com.sharknade:and-web-library`；后者 POM 经 `pom.withXml` 把 project 依赖改写为同版本 Maven 坐标（`compile` scope 传递依赖，消费者可 override）；本地构建仍走 project 依赖不受影响
+- **实施注记**：`withSourcesJar` 产生的 `sourceReleaseJar` 会打包 `kotlin.srcDir` 注册的 codegen 生成目录，Gradle 9 隐式依赖校验要求显式声明 `tasks.named("sourceReleaseJar") { dependsOn(protoCodegen) }`（v0.1.0 首发实测踩中；本地仅验证 POM 生成任务不涉及 sourceJar 故未暴露）
+- **被否备选**：fat AAR 合并（AGP 9.x 不支持 embed 依赖，社区插件不兼容）；只发主坐标（POM 依赖断裂，消费者无法构建）
+
+### 2.22 Android 版本注入：tag 驱动 `-Pversion`，源码不硬编码
+
+- **背景**：Android 侧无包管理器清单文件，源码硬编码 version 会引入「忘改版本」失败模式（iOS podspec 已需人工同步，npm package.json 亦是）
+- **决策**：CI 从 tag 提取版本经 `-Pversion=x.y.z` 注入，`build.gradle.kts` 以 `project.findProperty("version") ?: "0.0.0-SNAPSHOT"` 读取；发布版本唯一真相源是 tag
+- **被否备选**：硬编码 version（人工同步负担，且无法本地预览发布版本）；git describe 动态推算（tag 重打场景下与 CI 校验逻辑不一致）
+
+### 2.23 npm 包改名：`@mp-sdk/bridge` → `@androidfdyb/bridge`
+
+- **背景**：GitHub Packages npm registry 强制 scope = owner（小写），owner 为 `AndroidFDYB`，`@mp-sdk` scope 无法发布
+- **决策**：包名改为 `@androidfdyb/bridge`（BREAKING）；同步移除 `file:../specs/proto-codegen` 依赖（构建期工具，产物已 bundle 进 dist，`file:` 依赖原样发布会让消费者安装必然失败）；`publishConfig.registry` 指向 `npm.pkg.github.com`
+- **影响面**：vue-web 演示工程依赖与 import、README 示例、TGZ 产物名（自动跟随）；旧 tgz 手动安装路径不受影响
+- **被否备选**：保持 `@mp-sdk/bridge` + 公共 registry（违背 Proprietary 约束）；TRANSFER org `mp-sdk` 到 GitHub（组织级操作，超出工程变更范围）
+
 ---
 
 ## 3. 模块依赖关系
@@ -287,7 +320,7 @@ vue-web-sdk/                     # 前端 SDK（TypeScript，产出 TGZ）
 │           ├── decorators.gen.ts # @wait*Sync 装饰器
 │           └── handlers.gen.ts   # setupDataSyncHandlers()
 ├── vite.config.ts              # Vite 库模式（ESM + CJS）+ mpProtoPlugin 注册
-└── package.json                # 依赖 @mp-sdk/proto-codegen
+└── package.json                # @androidfdyb/bridge（发布至 GitHub Packages npm registry，零运行时依赖）
 ```
 
 ---
@@ -342,7 +375,7 @@ Native -> JS:
 
 ### 4.3 前端 SDK 统一 API
 
-前端 SDK（`@mp-sdk/bridge`）提供统一的跨平台 API，内部自动适配：
+前端 SDK（`@androidfdyb/bridge`）提供统一的跨平台 API，内部自动适配：
 
 | API | Android 实现 | 鸿蒙实现 |
 |-----|-------------|----------|
@@ -563,7 +596,7 @@ helper.getSyncState(): SyncState
 > **注**：标准通道的 TypeScript 接口（`UserInfo` / `LoanInfo` / `VipInfo`）、通道配置（`STANDARD_CHANNELS` / `STANDARD_CHANNEL_CONFIGS`）、装饰器（`@waitUserInfoSync` 等）、Handler 注册函数（`setupDataSyncHandlers`）均由 Vite 插件 `mpProtoPlugin` 从 `specs/proto/channels.proto` 自动生成到 `src/data-sync/generated/` 目录。`index.ts` 从生成文件导出这些产物。
 
 ```typescript
-import { bridge, getBridge } from '@mp-sdk/bridge'
+import { bridge, getBridge } from '@androidfdyb/bridge'
 
 // 获取平台
 bridge.getPlatform()  // 'android' | 'harmony' | 'web'
@@ -657,12 +690,12 @@ npm run build:web
     → vue-tsc --declaration  # 类型检查 + 生成 .d.ts
   → npm pack
   → node scripts/post-build.js web
-  → output/web/mp-sdk-bridge-1.0.0.tgz
+  → output/web/androidfdyb-bridge-<version>.tgz
 ```
 
 - Vite 库模式：ESM（`mp-bridge.js`）+ CJS（`mp-bridge.cjs`）
 - 类型声明：`vite-plugin-dts` 自动生成 `.d.ts`
-- 零运行时依赖（`@mp-sdk/proto-codegen` 仅开发时依赖）
+- 零依赖发布：原 `file:../specs/proto-codegen` 构建期依赖已移除（codegen 产物已 bundle 进 dist；本地开发由根 package.json 的 file: 引用满足）
 - Vite 插件 `mpProtoPlugin`：`buildStart` 解析 proto 生成代码，`configureServer` watch proto 变化自动刷新 + HMR
 
 ### 8.5 集成测试验证标准
@@ -679,7 +712,7 @@ npm run build:web
 | iOS SDK | `npm run build:ios`（纯 Node 流程，Windows / Linux / macOS 均可） | codegen 产物正确 + zip 源码包输出到 output/ios/ |
 | 全部四端 | `npm run build:all` | 四端均 BUILD SUCCESSFUL + output/ 产物完整 |
 | Proto 变更 | `npm run build:proto` 后执行四端构建 | 解析器重建 + 四端 codegen 产物正确 |
-| CI 侧守门 | push 到 `main` 触发 `.github/workflows/build.yml` | 四 job 全绿 + 三端制品可下载（详见 §8.7） |
+| CI 侧守门 | push 版本标签（`v*`）触发 `.github/workflows/build.yml` | 四 build job 全绿 + 三端制品可下载，三 publish job 发布成功（详见 §8.7） |
 
 #### 验证流程规范
 
@@ -704,21 +737,27 @@ output/
 ├── android/and_web_library-release.aar
 ├── harmony/hm_web_library.har
 ├── ios/ios_web_library-1.0.0.zip
-└── web/mp-sdk-bridge-1.0.0.tgz
+└── web/androidfdyb-bridge-<version>.tgz
 ```
 
 ### 8.7 CI 流水线（GitHub Actions）
 
 ```
-.github/workflows/build.yml      触发：push 到 main / workflow_dispatch
+.github/workflows/build.yml      触发：push tag v* / workflow_dispatch
   ├── web              Node 22 → npm ci（根 + vue-web-sdk）→ build:web        → 制品 web-tgz
   ├── ios              Node 22 → npm ci → build:ios → unzip -t 完整性校验     → 制品 ios-zip
   ├── android          JDK 21 + Node 22 → npm ci → Gradle 缓存 → build:android → 制品 android-aar
   └── harmony-codegen  Node 22 → codegen:harmony + scan:harmony → 生成物非空断言（无制品）
-  （四个 job 均为 ubuntu-latest，互不声明 needs）
+  （四个 build job 均为 ubuntu-latest，互不声明 needs）
+
+  发布 job（仅 tag 触发，各 needs 对应 build job）：
+  ├── publish-ios      校验 podspec 版本 == tag → 推送 podspec 至私有 spec repo（§2.17）
+  ├── publish-web      校验 package.json 版本 == tag → npm publish 至 GitHub Packages（§2.20）
+  └── publish-android  tag 版本经 -Pversion 注入 → Gradle publish 双坐标至 GitHub Packages（§2.21 / §2.22）
 ```
 
-- 单端失败不阻断其余端制品产出；失败原因在对应 job 日志中可观测
+- build 与 publish 双层失败隔离：单端失败不阻断其余端制品产出与发布；失败原因在对应 job 日志中可观测
+- 三个 publish job 第一步即做版本 fail-fast 校验，版本不一致时 registry 零写入
 - 三个产物 job 构建前清空本端 `output/` 子目录 + `if-no-files-found: error`，防陈旧制品假绿（§2.15）
 - `harmony-codegen` 为降级校验，仅证明 proto → ArkTS 生成链路未断，不宣称 HAR 可构建（§2.14）
 - 制品保留 90 天，从 Actions 运行页下载；不自动发 Release
@@ -809,7 +848,7 @@ output/
 | `scripts/build-ios.js` | iOS zip 源码包构建（含 proto codegen 预处理与源码完整性校验） |
 | `scripts/post-build.js` | 产物收集到 output/ |
 | `package.json` | 根目录 npm scripts（含 build:proto, codegen:harmony, codegen:ios） |
-| `.github/workflows/build.yml` | CI 流水线：四 job 并行（web / ios / android 制品 + harmony-codegen 降级校验） |
+| `.github/workflows/build.yml` | CI 流水线：四 build job 并行 + 三 publish job（tag 触发，发布至 spec repo / GitHub Packages） |
 | `specs/bridge-protocol.ts` | 多端共享协议定义（协议对齐参考） |
 
 ---
