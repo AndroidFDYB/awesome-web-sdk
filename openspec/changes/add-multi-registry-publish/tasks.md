@@ -39,5 +39,7 @@
 
 ## 5. 正式发布
 
-- [ ] 5.1 podspec `s.version` bump 至正式版本（与 npm/Android 版本对齐），提交后打正式 tag（如 `v1.0.1`），三端 publish job 全绿，GitHub Packages 出现三个正式制品（npm 包 / Maven 双坐标 / spec repo podspec）
+- [x] 5.1 podspec `s.version` bump 至正式版本（与 npm/Android 版本对齐），提交后打正式 tag（如 `v1.0.1`），三端 publish job 全绿，GitHub Packages 出现三个正式制品（npm 包 / Maven 双坐标 / spec repo podspec）
+  - 实测：d618ac1 三端对齐 1.0.1（vue-web-sdk 0.1.1→1.0.1、podspec 1.0.0→1.0.1、Android 无源码改动）→ tag v1.0.1 → run #10 **七 job 全 SUCCESS**（4 build + 三 publish）。取证：npm `@androidfdyb/bridge` 1.0.1（publish-web SUCCESS）、Maven `com.sharknade:jsbridge` + `and-web-library` 1.0.1（publish-android SUCCESS，日志 BUILD SUCCESSFUL）、spec repo `Specs/ios_web_library/1.0.1/ios-web-library.podspec`（API contents 取证 1433 bytes，commit af5d260）
 - [ ] 5.2 消费侧冒烟（人工，可选）：任一消费工程按 README 集成章节拉取 `@androidfdyb/bridge` 或 Maven 双坐标，确认一行依赖解析成功
+  - 移交消费方：README「GitHub Packages 集成（Android / Web）」章节已备齐消费者配置（PAT read:packages + settings.gradle / .npmrc + 一行依赖示例）；私有 registry 读取需 read:packages PAT（本仓库维护 PAT 仅 repo/workflow scope 无法代验），首个真实消费工程接入时按章节配置冒烟
