@@ -6,6 +6,10 @@
  * - Android：使用 happydog-intj/JsBridge，通过 BridgeWebView 自动注入 window.WebViewJavascriptBridge
  *   JS 端使用 setupWebViewJavascriptBridge() 初始化，bridge.callHandler / bridge.registerHandler
  *
+ * - Flutter：使用 flutter_inappwebview，bridge.js 注入 window.dsBridge（dsBridge 兼容协议）
+ *   同时设置 window.__flutter_bridge（精确检测）和 window.__harmony_bridge（兼容标记）
+ *   复用 HarmonyBridgeAdapter，JS 端 API 与鸿蒙完全一致
+ *
  * - 鸿蒙：使用 MPBridgeWeb 组件注入 bridge.js，提供 window.dsBridge（自定义协议）
  *   JS 端使用 dsBridge.call / dsBridge.callAsync / dsBridge.register
  *
@@ -38,7 +42,12 @@ interface DetectResult {
  * Android (JsBridge): window.WebViewJavascriptBridge 由 BridgeWebView 注入
  *   需要通过 setupWebViewJavascriptBridge(callback) 等待 bridge ready
  *
+ * Flutter (dsBridge 兼容): window.__flutter_bridge + window.dsBridge 由 bridge.js 注入
+ *   Flutter bridge.js 同时设置 __flutter_bridge 和 __harmony_bridge
+ *
  * 鸿蒙 (自定义协议): window.dsBridge + window.__harmony_bridge 由 MPBridgeWeb 注入
+ *
+ * 检测优先级：Android > Flutter > 鸿蒙 > Web
  */
 function detect(): DetectResult {
   if (typeof window === 'undefined') {
@@ -49,6 +58,11 @@ function detect(): DetectResult {
   // Android: JsBridge 注入 window.WebViewJavascriptBridge
   if (w.WebViewJavascriptBridge) {
     return { platform: 'android', bridgeType: 'android-jsbridge' };
+  }
+
+  // Flutter: bridge.js 注入 __flutter_bridge + dsBridge（优先级高于鸿蒙）
+  if (w.__flutter_bridge && w.dsBridge) {
+    return { platform: 'flutter', bridgeType: 'harmony-dsbridge' };
   }
 
   // 鸿蒙: 自定义 bridge.js 注入 window.dsBridge + window.__harmony_bridge

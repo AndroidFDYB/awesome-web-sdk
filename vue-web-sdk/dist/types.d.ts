@@ -2,7 +2,7 @@
  * MPBridge 类型定义
  */
 /** 平台标识 */
-export type Platform = 'android' | 'harmony' | 'web' | 'unknown';
+export type Platform = 'android' | 'harmony' | 'flutter' | 'web' | 'unknown';
 /** 同步 Handler 签名 */
 export type SyncHandler = (params: any) => any;
 /** 异步 Handler 签名 */

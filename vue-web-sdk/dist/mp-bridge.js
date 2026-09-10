@@ -1,4 +1,4 @@
-const j = "platform", P = ["android", "harmony", "web"];
+const j = "platform", P = ["android", "harmony", "flutter", "web"];
 function D() {
   if (typeof window > "u" || !window.location)
     return null;
@@ -9,7 +9,7 @@ function M() {
   if (typeof window > "u")
     return "unknown";
   const n = window;
-  return n.WebViewJavascriptBridge ? "android" : n.__harmony_bridge && n.dsBridge ? "harmony" : "web";
+  return n.WebViewJavascriptBridge ? "android" : n.__flutter_bridge && n.dsBridge ? "flutter" : n.__harmony_bridge && n.dsBridge ? "harmony" : "web";
 }
 function A() {
   const n = D();
@@ -17,7 +17,7 @@ function A() {
 }
 function Y() {
   const n = A();
-  return n === "android" || n === "harmony";
+  return n === "android" || n === "harmony" || n === "flutter";
 }
 function K() {
   var e;
@@ -27,6 +27,7 @@ function K() {
     windowPlatform: M(),
     finalPlatform: A(),
     hasAndroidBridge: !!(n != null && n.WebViewJavascriptBridge),
+    hasFlutterBridge: !!(n != null && n.__flutter_bridge && (n != null && n.dsBridge)),
     hasHarmonyBridge: !!(n != null && n.__harmony_bridge && (n != null && n.dsBridge)),
     url: ((e = n == null ? void 0 : n.location) == null ? void 0 : e.href) ?? null
   };
@@ -84,16 +85,16 @@ class N {
     if (this.state.ready)
       return Promise.resolve(this.state.data);
     const t = e ?? this.config.timeout ?? this.managerConfig.defaultTimeout ?? 1e4;
-    return new Promise((r, a) => {
-      const i = {
+    return new Promise((r, i) => {
+      const a = {
         resolve: r,
-        reject: a,
+        reject: i,
         timer: null
       };
-      t > 0 && (i.timer = setTimeout(() => {
-        const s = this.waiters.indexOf(i);
-        s >= 0 && this.waiters.splice(s, 1), a(new Error(`[DataSync] Channel "${this.config.name}" timed out after ${t}ms`));
-      }, t)), this.waiters.push(i), this.debug(`Waiting for data on channel "${this.config.name}" (timeout: ${t}ms, ${this.waiters.length} waiters)`);
+      t > 0 && (a.timer = setTimeout(() => {
+        const s = this.waiters.indexOf(a);
+        s >= 0 && this.waiters.splice(s, 1), i(new Error(`[DataSync] Channel "${this.config.name}" timed out after ${t}ms`));
+      }, t)), this.waiters.push(a), this.debug(`Waiting for data on channel "${this.config.name}" (timeout: ${t}ms, ${this.waiters.length} waiters)`);
     });
   }
   /**
@@ -195,9 +196,9 @@ class E {
    */
   async waitForAll(e, t) {
     const r = await Promise.all(
-      e.map(async (a) => {
-        const i = await this.waitForData(a, t);
-        return [a, i];
+      e.map(async (i) => {
+        const a = await this.waitForData(i, t);
+        return [i, a];
       })
     );
     return Object.fromEntries(r);
@@ -222,15 +223,15 @@ function v() {
   const n = p();
   for (const e of T) {
     const t = e.name, r = e.nativeMethod;
-    n.register(r, (a) => {
-      let i = a;
-      if (typeof a == "string")
+    n.register(r, (i) => {
+      let a = i;
+      if (typeof i == "string")
         try {
-          i = JSON.parse(a);
+          a = JSON.parse(i);
         } catch {
-          i = a;
+          a = i;
         }
-      return g().pushData(t, i), { success: !0, channel: t };
+      return g().pushData(t, a), { success: !0, channel: t };
     });
   }
 }
@@ -245,7 +246,7 @@ const ee = {
   COMMON: "common",
   /** Native 端（前端发给原生，Native 直接消费） */
   HOST: "host"
-}, I = "postToNative", C = "postToWeb";
+}, I = "postToNative", _ = "postToWeb";
 function S(n) {
   if (!n || typeof n != "string") return !1;
   const e = n.split(":");
@@ -254,7 +255,7 @@ function S(n) {
 function te(n) {
   return S(n) ? n.split(":")[0] : null;
 }
-class H {
+class C {
   constructor(e = !1) {
     this.handlers = /* @__PURE__ */ new Map(), this.transport = null, this.debug = !1, this.debug = e;
   }
@@ -323,10 +324,10 @@ class H {
       return;
     }
     this.log(`dispatch: "${e}", calling ${r.size} handlers`);
-    const a = Array.from(r);
-    for (const i of a)
+    const i = Array.from(r);
+    for (const a of i)
       try {
-        i(t);
+        a(t);
       } catch (s) {
         console.error(`[MPEmitter] Handler error for event "${e}":`, s);
       }
@@ -366,16 +367,16 @@ class H {
 }
 let c = null;
 function $(n = !1) {
-  return c || (c = new H(n)), c;
+  return c || (c = new C(n)), c;
 }
-function R() {
+function H() {
   c && c.clear(), c = null;
 }
-function _() {
+function R() {
   if (typeof window > "u")
     return { platform: "unknown", bridgeType: "none" };
   const n = window;
-  return n.WebViewJavascriptBridge ? { platform: "android", bridgeType: "android-jsbridge" } : n.__harmony_bridge && n.dsBridge ? { platform: "harmony", bridgeType: "harmony-dsbridge" } : { platform: "web", bridgeType: "none" };
+  return n.WebViewJavascriptBridge ? { platform: "android", bridgeType: "android-jsbridge" } : n.__flutter_bridge && n.dsBridge ? { platform: "flutter", bridgeType: "harmony-dsbridge" } : n.__harmony_bridge && n.dsBridge ? { platform: "harmony", bridgeType: "harmony-dsbridge" } : { platform: "web", bridgeType: "none" };
 }
 function L(n) {
   const e = window;
@@ -394,8 +395,8 @@ class W {
   }
   /** 调用 Native Handler */
   callHandler(e, t, r) {
-    const a = typeof t == "string" ? t : JSON.stringify(t ?? {});
-    this.bridge.callHandler(e, a, r);
+    const i = typeof t == "string" ? t : JSON.stringify(t ?? {});
+    this.bridge.callHandler(e, i, r);
   }
   /** 注册 JS Handler */
   registerHandler(e, t) {
@@ -425,14 +426,14 @@ class J {
     return this.bridge.hasMethod(e);
   }
 }
-class k {
+class F {
   constructor() {
-    this.androidAdapter = null, this.harmonyAdapter = null, this.jsHandlers = /* @__PURE__ */ new Map(), this.jsAsyncHandlers = /* @__PURE__ */ new Map(), this.ready = !1, this.pendingCalls = [], this.detectResult = _(), this.initBridge();
+    this.androidAdapter = null, this.harmonyAdapter = null, this.jsHandlers = /* @__PURE__ */ new Map(), this.jsAsyncHandlers = /* @__PURE__ */ new Map(), this.ready = !1, this.pendingCalls = [], this.detectResult = R(), this.initBridge();
   }
   initBridge() {
     const { platform: e, bridgeType: t } = this.detectResult, r = typeof window < "u" ? window : null;
-    t === "android-jsbridge" && (r != null && r.WebViewJavascriptBridge) ? L((a) => {
-      this.androidAdapter = new W(a), this.onReady();
+    t === "android-jsbridge" && (r != null && r.WebViewJavascriptBridge) ? L((i) => {
+      this.androidAdapter = new W(i), this.onReady();
     }) : t === "harmony-dsbridge" && (r != null && r.dsBridge) ? (this.harmonyAdapter = new J(r.dsBridge), this.onReady()) : this.ready = !0;
   }
   onReady() {
@@ -440,7 +441,7 @@ class k {
       this.registerToNative(t, e, !1);
     }), this.jsAsyncHandlers.forEach((e, t) => {
       this.registerToNative(t, e, !0);
-    }), u || (v(), u = !0), w || (F(), w = !0), this.pendingCalls.forEach((e) => e()), this.pendingCalls = [];
+    }), h || (v(), h = !0), w || (k(), w = !0), this.pendingCalls.forEach((e) => e()), this.pendingCalls = [];
   }
   getPlatform() {
     return A();
@@ -460,26 +461,26 @@ class k {
    */
   callAsync(e, t) {
     return new Promise((r) => {
-      const a = () => {
+      const i = () => {
         if (this.androidAdapter) {
-          this.androidAdapter.callHandler(e, t, (i) => {
+          this.androidAdapter.callHandler(e, t, (a) => {
             try {
-              r(JSON.parse(i));
+              r(JSON.parse(a));
             } catch {
-              r(i);
+              r(a);
             }
           });
           return;
         }
         if (this.harmonyAdapter) {
-          this.harmonyAdapter.callAsync(e, t, (i) => {
-            r(i);
+          this.harmonyAdapter.callAsync(e, t, (a) => {
+            r(a);
           });
           return;
         }
         console.warn(`[MPBridge] No native bridge. Cannot callAsync "${e}".`), r(null);
       };
-      this.ready ? a() : this.pendingCalls.push(a);
+      this.ready ? i() : this.pendingCalls.push(i);
     });
   }
   /**
@@ -490,8 +491,8 @@ class k {
       this.jsHandlers.set(e, t);
     else {
       const r = t;
-      for (const a of Object.keys(r))
-        typeof r[a] == "function" && this.jsHandlers.set(`${e}.${a}`, r[a]);
+      for (const i of Object.keys(r))
+        typeof r[i] == "function" && this.jsHandlers.set(`${e}.${i}`, r[i]);
     }
     this.ready && this.registerToNative(e, t, !1);
   }
@@ -503,8 +504,8 @@ class k {
       this.jsAsyncHandlers.set(e, t);
     else {
       const r = t;
-      for (const a of Object.keys(r))
-        typeof r[a] == "function" && this.jsAsyncHandlers.set(`${e}.${a}`, r[a]);
+      for (const i of Object.keys(r))
+        typeof r[i] == "function" && this.jsAsyncHandlers.set(`${e}.${i}`, r[i]);
     }
     this.ready && this.registerToNative(e, t, !0);
   }
@@ -525,37 +526,37 @@ class k {
    * 将 handler 注册到原生桥
    */
   registerToNative(e, t, r) {
-    this.androidAdapter && typeof t == "function" ? this.androidAdapter.registerHandler(e, (a, i) => {
+    this.androidAdapter && typeof t == "function" ? this.androidAdapter.registerHandler(e, (i, a) => {
       let s;
       try {
-        s = JSON.parse(a);
+        s = JSON.parse(i);
       } catch {
-        s = a;
+        s = i;
       }
       if (r)
         t(s, (o) => {
-          i(typeof o == "string" ? o : JSON.stringify(o));
+          a(typeof o == "string" ? o : JSON.stringify(o));
         });
       else {
         const o = t(s);
-        i(typeof o == "string" ? o : JSON.stringify(o));
+        a(typeof o == "string" ? o : JSON.stringify(o));
       }
     }) : this.harmonyAdapter && (r ? this.harmonyAdapter.registerAsyn(e, t) : this.harmonyAdapter.register(e, t));
   }
 }
 let f = null;
 function p() {
-  return f || (f = new k()), f;
+  return f || (f = new F()), f;
 }
 function ne() {
-  f = null, u = !1, w = !1, R();
+  f = null, h = !1, w = !1, H();
 }
 let w = !1;
-function F() {
+function k() {
   const n = p(), e = $();
   e.setTransport((t, r) => {
     n.callAsync(I, { event: t, data: r });
-  }), n.register(C, (t) => {
+  }), n.register(_, (t) => {
     let r = t;
     if (typeof t == "string")
       try {
@@ -566,19 +567,19 @@ function F() {
     return r && typeof r == "object" && "event" in r && e.dispatch(r.event, r.data), { success: !0 };
   });
 }
-let u = !1;
+let h = !1;
 function re() {
-  u || (v(), u = !0);
+  h || (v(), h = !0);
 }
-const h = [];
+const u = [];
 function V(n) {
-  h.push(n);
+  u.push(n);
 }
 function O() {
-  return h.pop();
+  return u.pop();
 }
 function U() {
-  return h.length > 0 ? [...h[h.length - 1]] : [];
+  return u.length > 0 ? [...u[u.length - 1]] : [];
 }
 function z(n, e) {
   if (!n || !e) return !1;
@@ -594,10 +595,10 @@ function q(n, e, t) {
   switch (e.injectTo ?? "body") {
     case "headers": {
       n.headers || (n.headers = {});
-      const a = e.headerMap;
-      if (a && typeof t == "object")
-        for (const [i, s] of Object.entries(a))
-          t[i] != null && (n.headers[s] = String(t[i]));
+      const i = e.headerMap;
+      if (i && typeof t == "object")
+        for (const [a, s] of Object.entries(i))
+          t[a] != null && (n.headers[s] = String(t[a]));
       else typeof t == "object" ? Object.assign(n.headers, t) : n.headers[e.name] = String(t);
       break;
     }
@@ -614,25 +615,25 @@ function q(n, e, t) {
 }
 function G(n) {
   const e = g(), t = n.enableDecoratorContext !== !1;
-  return async function(a) {
-    const i = /* @__PURE__ */ new Set();
+  return async function(i) {
+    const a = /* @__PURE__ */ new Set();
     if (t) {
       const s = U();
       for (const o of s)
-        i.add(o);
+        a.add(o);
     }
-    if (n.routes && a.url) {
+    if (n.routes && i.url) {
       for (const [s, o] of Object.entries(n.routes))
-        if (z(a.url, s))
+        if (z(i.url, s))
           for (const l of o)
-            i.add(l);
+            a.add(l);
     }
-    for (const s of i) {
+    for (const s of a) {
       const o = n.channels[s];
       if (o)
         try {
           const l = await e.waitForData(s, o.timeout);
-          q(a, o, l);
+          q(i, o, l);
         } catch (l) {
           console.warn(
             `[DataSync] Failed to get data for channel "${s}":`,
@@ -640,10 +641,10 @@ function G(n) {
           );
         }
     }
-    return a;
+    return i;
   };
 }
-function ae(n, e) {
+function ie(n, e) {
   const t = G(e);
   return n.interceptors.request.use(t);
 }
@@ -651,8 +652,8 @@ const b = /* @__PURE__ */ new WeakMap();
 function Q(n, e, t) {
   let r = b.get(n);
   r || (r = /* @__PURE__ */ new Map(), b.set(n, r));
-  const a = r.get(e) || [];
-  return a.includes(t) || a.push(t), r.set(e, a), a;
+  const i = r.get(e) || [];
+  return i.includes(t) || i.push(t), r.set(e, i), i;
 }
 function B(n, e) {
   const t = b.get(n);
@@ -661,8 +662,8 @@ function B(n, e) {
 function y(n) {
   return function(e, t, r) {
     Q(e, t, n);
-    const a = r.value;
-    return r.value = async function(...i) {
+    const i = r.value;
+    return r.value = async function(...a) {
       const s = g(), o = B(e, t);
       for (const l of o)
         try {
@@ -675,17 +676,17 @@ function y(n) {
         }
       V(o);
       try {
-        return await a.apply(this, i);
+        return await i.apply(this, a);
       } finally {
         O();
       }
     }, Object.defineProperty(r.value, "name", {
-      value: a.name,
+      value: i.name,
       writable: !1
     }), r;
   };
 }
-function ie(n, e) {
+function ae(n, e) {
   return B(n, e);
 }
 function se(n) {
@@ -699,28 +700,28 @@ async function de(n) {
   const t = { scheme: n }, r = await e.callAsync(X, t);
   return r && typeof r == "object" && "code" in r ? r : { code: 0, message: "success" };
 }
-const he = $(), ue = p();
+const ue = $(), he = p();
 export {
   E as DataSyncManager,
   ee as EMITTER_CONTAINER,
   X as JUMP2NATIVE_METHOD,
-  H as MPEmitter,
+  C as MPEmitter,
   j as PLATFORM_QUERY_KEY,
   I as POST_TO_NATIVE_METHOD,
-  C as POST_TO_WEB_METHOD,
+  _ as POST_TO_WEB_METHOD,
   Z as STANDARD_CHANNELS,
   T as STANDARD_CHANNEL_CONFIGS,
-  ue as bridge,
+  he as bridge,
   G as createDataSyncInterceptor,
   se as createWaitDecorator,
   D as detectPlatformFromUrl,
   M as detectPlatformFromWindow,
-  he as emitter,
+  ue as emitter,
   p as getBridge,
   te as getContainerName,
   g as getDataSyncManager,
   $ as getEmitter,
-  ie as getMethodWaitChannels,
+  ae as getMethodWaitChannels,
   A as getPlatform,
   K as getPlatformDebugInfo,
   A as getPlatformFromUrl,
@@ -731,10 +732,10 @@ export {
   z as matchUrlPattern,
   ne as resetBridge,
   x as resetDataSyncManager,
-  R as resetEmitter,
+  H as resetEmitter,
   re as setupDataSyncHandlers,
-  ae as setupDataSyncInterceptor,
-  F as setupEmitterBridge,
+  ie as setupDataSyncInterceptor,
+  k as setupEmitterBridge,
   y as waitDataSync,
   le as waitLoanInfoSync,
   oe as waitUserInfoSync,

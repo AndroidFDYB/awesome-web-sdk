@@ -25,7 +25,7 @@ import type { Platform } from './types';
 export const PLATFORM_QUERY_KEY = 'platform';
 
 /** 有效的平台标识值 */
-const VALID_PLATFORMS: Platform[] = ['android', 'harmony', 'web'];
+const VALID_PLATFORMS: Platform[] = ['android', 'harmony', 'flutter', 'web'];
 
 /**
  * 从当前页面 URL 的查询参数中读取平台标识
@@ -55,7 +55,11 @@ export function detectPlatformFromUrl(): Platform | null {
  * 通过 Window 对象检测平台
  *
  * Android: BridgeWebView 自动注入 window.WebViewJavascriptBridge
+ * Flutter: bridge.js 注入 window.__flutter_bridge + window.dsBridge
  * 鸿蒙: MPBridgeWeb 注入 window.dsBridge + window.__harmony_bridge
+ *
+ * 检测优先级：Android > Flutter > 鸿蒙 > Web
+ * Flutter 优先于鸿蒙检测，因为 Flutter bridge.js 同时设置了两个标记
  */
 export function detectPlatformFromWindow(): Platform {
   if (typeof window === 'undefined') {
@@ -67,6 +71,11 @@ export function detectPlatformFromWindow(): Platform {
   // Android: JsBridge 注入 WebViewJavascriptBridge
   if (w.WebViewJavascriptBridge) {
     return 'android';
+  }
+
+  // Flutter: bridge.js 同时设置 __flutter_bridge + dsBridge（优先级高于鸿蒙）
+  if (w.__flutter_bridge && w.dsBridge) {
+    return 'flutter';
   }
 
   // 鸿蒙: 自定义协议注入
@@ -104,7 +113,7 @@ export function getPlatform(): Platform {
  */
 export function isNativeEnvironment(): boolean {
   const platform = getPlatform();
-  return platform === 'android' || platform === 'harmony';
+  return platform === 'android' || platform === 'harmony' || platform === 'flutter';
 }
 
 /**
@@ -115,6 +124,7 @@ export function getPlatformDebugInfo(): {
   windowPlatform: Platform;
   finalPlatform: Platform;
   hasAndroidBridge: boolean;
+  hasFlutterBridge: boolean;
   hasHarmonyBridge: boolean;
   url: string | null;
 } {
@@ -124,6 +134,7 @@ export function getPlatformDebugInfo(): {
     windowPlatform: detectPlatformFromWindow(),
     finalPlatform: getPlatform(),
     hasAndroidBridge: !!w?.WebViewJavascriptBridge,
+    hasFlutterBridge: !!(w?.__flutter_bridge && w?.dsBridge),
     hasHarmonyBridge: !!(w?.__harmony_bridge && w?.dsBridge),
     url: w?.location?.href ?? null,
   };

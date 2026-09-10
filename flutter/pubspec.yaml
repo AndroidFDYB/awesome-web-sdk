@@ -1,0 +1,20 @@
+name: mp_web_library
+description: MP-SDK Flutter 端原生 SDK —— WebView 容器桥接、数据同步、AppLink 跳转、跨 WebView 事件路由。
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_inappwebview: ^6.1.5
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+
+flutter:
+  assets:
+    - assets/bridge.js

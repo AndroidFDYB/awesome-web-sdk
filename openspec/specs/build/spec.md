@@ -2,15 +2,15 @@
 
 ## Purpose
 
-定义四端 SDK 的统一构建入口、产物形态、验证标准与自动化构建流水线的行为契约：npm scripts 统一编排、构建产物输出、跨端环境要求、源码托管平台的无人工干预构建。构建是"开发完成"的唯一判定标准。
+定义五端 SDK 的统一构建入口、产物形态、验证标准与自动化构建流水线的行为契约：npm scripts 统一编排、构建产物输出、跨端环境要求、源码托管平台的无人工干预构建。构建是"开发完成"的唯一判定标准。
 
 ## Requirements
 
 ### Requirement: 统一构建入口
-四端构建 SHALL 统一由根目录 package.json 的 npm scripts 编排，构建脚本 MUST 使用跨平台 Node.js 语法，MUST NOT 使用 PowerShell 专有命令，MUST NOT 硬编码单一操作系统专有的可执行入口；构建命令 MUST 在 Windows 本地开发环境与 Linux CI 环境中均可执行。
+五端构建 SHALL 统一由根目录 package.json 的 npm scripts 编排，构建脚本 MUST 使用跨平台 Node.js 语法，MUST NOT 使用 PowerShell 专有命令，MUST NOT 硬编码单一操作系统专有的可执行入口；构建命令 MUST 在 Windows 本地开发环境与 Linux CI 环境中均可执行。Flutter 端构建命令仅用于本地开发验证，MUST NOT 纳入 CI 自动化流水线。
 
 #### Scenario: 全量构建
-- GIVEN 四端构建环境就绪
+- GIVEN 五端构建环境就绪
 - WHEN 执行全量构建命令
 - THEN Android、鸿蒙、前端、iOS SDK 依次构建完成
 - AND 全部产物输出到统一产物目录
@@ -37,6 +37,14 @@
 - WHEN 执行 iOS 单端构建命令
 - THEN 先生成 Objective-C 产物，再完成源码完整性校验与产物打包
 - AND 打包产物输出到统一产物目录
+
+#### Scenario: Flutter 单端构建
+- GIVEN Flutter 开发环境就绪（Flutter SDK 可用）
+- WHEN 执行 Flutter 单端构建命令
+- THEN 先执行 Proto Codegen 生成 Dart 产物
+- AND 再执行 Dart 静态分析与依赖解析
+- AND 构建结果在本地可验证
+- AND 该命令不纳入 CI 自动化流水线
 
 ### Requirement: 构建产物形态
 构建产物 SHALL 输出至统一的产物目录并保持稳定命名：Android 为 AAR、鸿蒙为 HAR、前端为 TGZ（双模块格式）、iOS 为源码包（zip，含 CocoaPods podspec）。

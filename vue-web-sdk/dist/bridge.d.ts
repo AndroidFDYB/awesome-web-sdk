@@ -6,6 +6,10 @@
  * - Android：使用 happydog-intj/JsBridge，通过 BridgeWebView 自动注入 window.WebViewJavascriptBridge
  *   JS 端使用 setupWebViewJavascriptBridge() 初始化，bridge.callHandler / bridge.registerHandler
  *
+ * - Flutter：使用 flutter_inappwebview，bridge.js 注入 window.dsBridge（dsBridge 兼容协议）
+ *   同时设置 window.__flutter_bridge（精确检测）和 window.__harmony_bridge（兼容标记）
+ *   复用 HarmonyBridgeAdapter，JS 端 API 与鸿蒙完全一致
+ *
  * - 鸿蒙：使用 MPBridgeWeb 组件注入 bridge.js，提供 window.dsBridge（自定义协议）
  *   JS 端使用 dsBridge.call / dsBridge.callAsync / dsBridge.register
  *
