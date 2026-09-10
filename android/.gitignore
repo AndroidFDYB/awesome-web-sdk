@@ -9,6 +9,8 @@
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
+# 子模块构建目录（proto-codegen / data-sync-processor 等的 build/ 曾被误入库）
+**/build/
 /captures
 .externalNativeBuild
 .cxx
