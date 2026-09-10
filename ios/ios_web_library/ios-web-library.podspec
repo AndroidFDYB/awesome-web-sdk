@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'ios_web_library'
-  s.version          = '1.0.0'
+  s.version          = '1.0.1'
   s.summary          = 'MP-SDK iOS 端 JSBridge SDK'
 
   s.description      = <<-DESC
