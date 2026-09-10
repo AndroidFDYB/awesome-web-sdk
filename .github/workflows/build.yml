@@ -250,6 +250,13 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           SPEC_REPO="https://x-access-token:${SPEC_REPO_TOKEN}@github.com/AndroidFDYB/Specs.git"
 
+          # 诊断：只打印长度不打印值（Actions 日志会自动把 secret 值打码为 ***）
+          echo "SPEC_REPO_TOKEN length: ${#SPEC_REPO_TOKEN}"
+          if [ -z "$SPEC_REPO_TOKEN" ]; then
+            echo "::error::SPEC_REPO_TOKEN is empty. Secret 未配置或名字不匹配（须精确为 SPEC_REPO_TOKEN，且配置在 awesome-web-sdk 仓库的 Actions secrets 下）。"
+            exit 1
+          fi
+
           echo "Cloning spec repo..."
           git clone "$SPEC_REPO" spec-repo
 
